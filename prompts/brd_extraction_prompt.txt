@@ -1,0 +1,46 @@
+You are a senior BI analyst. Read the Business Requirements Document (BRD) below and extract the
+reporting requirements as JSON. Extract only what the document states or clearly implies. Do not
+invent KPIs, audiences or data sources that are not in the text.
+
+Return ONLY a JSON object with this shape:
+{
+  "project_name": "short name of the reporting project",
+  "business_objective": "one or two sentences",
+  "domain": "ecommerce | retail | finance | other",
+  "stakeholders": ["roles or teams who will use the dashboards"],
+  "time_grain": "day | week | month | quarter | year",
+  "global_filters": ["business names of fields users must be able to filter by, e.g. Region"],
+  "dashboards": [
+    {
+      "name": "dashboard name",
+      "purpose": "what decision this dashboard supports",
+      "audience": "who uses it",
+      "kpis": [
+        {"name": "KPI name as written in the BRD",
+         "definition": "how the BRD defines or computes it, or empty",
+         "priority": "high | medium | low"}
+      ],
+      "visuals": [
+        {"title": "short chart title",
+         "metric": "business name of the measure",
+         "dimension": "business name of the breakdown, e.g. Month, Category, Region",
+         "chart_hint": "chart type if the BRD names one, else empty",
+         "top_n": null}
+      ]
+    }
+  ],
+  "assumptions": ["anything you had to interpret"],
+  "open_questions": ["requirements that are ambiguous or missing"]
+}
+
+Rules:
+- Group KPIs and visuals into the dashboards the BRD describes. If the BRD lists requirements
+  without naming dashboards, group them by theme (sales, customers, products, marketing, operations).
+- Each dashboard should have 2-6 KPIs and 2-6 visuals.
+- "Top 10 X" or "best/worst N" means top_n = N.
+- Keep names in business language; mapping to database columns happens later.
+
+BRD:
+"""
+{brd_text}
+"""

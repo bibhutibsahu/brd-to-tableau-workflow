@@ -1,0 +1,45 @@
+You are a Tableau dashboard designer. Turn the mapped requirements below into a dashboard plan.
+
+You may use ONLY these metric ids:
+{metrics}
+
+and ONLY these dimension ids (format table.column):
+{dimensions}
+
+Allowed chart types: {chart_types}
+Chart guidance:
+- time dimension (Month, Quarter, Week) -> line
+- share of a whole with at most {share_max} categories -> pie
+- ranking, long labels, or {hbar_min}+ categories -> horizontal_bar (set top_n for long lists)
+- few categories compared side by side -> bar
+- detail lists -> table
+- Percent or ratio metrics (rates, margin %) are never pie charts.
+
+Mapped requirements (JSON):
+{requirements}
+
+Data profile of each candidate visual (row counts from the database):
+{profile}
+
+Return ONLY a JSON object:
+{{
+  "title": "workbook title",
+  "filters": ["dimension ids used as dashboard filters, max 4"],
+  "dashboards": [
+    {{
+      "name": "dashboard name",
+      "purpose": "one sentence",
+      "kpis": ["metric ids, 2-6"],
+      "charts": [
+        {{"title": "chart title",
+          "chart": "one allowed chart type",
+          "metric": "metric id",
+          "dimension": "dimension id",
+          "sort": "desc | asc | none",
+          "top_n": null,
+          "rationale": "why this chart type"}}
+      ]
+    }}
+  ]
+}}
+Keep every requirement that was mapped. 2-6 charts per dashboard. Chart titles must be unique.
