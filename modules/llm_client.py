@@ -60,10 +60,12 @@ class LLMClient:
         )
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
         last_error = None
-        for attempt in range(2):
+        for _attempt in range(2):
             started = time.perf_counter()
             try:
-                response = self._get_client().models.generate_content(model=self.model, contents=contents, config=settings)
+                response = self._get_client().models.generate_content(
+                    model=self.model, contents=contents, config=settings
+                )
             except Exception as error:
                 self._record(purpose, prompt, "", started, None, ok=False, error=str(error))
                 raise LLMError(_friendly_error(error, self.model)) from error
@@ -77,31 +79,44 @@ class LLMClient:
                 self._record(purpose, prompt, text, started, response, ok=False, error=f"invalid JSON: {error}")
                 contents += [
                     {"role": "model", "parts": [{"text": text}]},
-                    {"role": "user", "parts": [{"text": f"That was not valid JSON ({error}). Reply with the corrected JSON object only."}]},
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": f"That was not valid JSON ({error}). Reply with the corrected JSON object only."}
+                        ],
+                    },
                 ]
         raise LLMError(f"{self.model} did not return valid JSON for {purpose or 'the request'}: {last_error}")
 
     def _record(self, purpose, prompt, text, started, response, ok, error=None):
         usage = getattr(response, "usage_metadata", None)
-        self.calls.append({
-            "purpose": purpose,
-            "model": self.model,
-            "ok": ok,
-            "error": error,
-            "latency_ms": round((time.perf_counter() - started) * 1000),
-            "prompt_tokens": getattr(usage, "prompt_token_count", None),
-            "output_tokens": getattr(usage, "candidates_token_count", None),
-            "prompt": prompt[:MAX_TRACE_CHARS],
-            "response": text[:MAX_TRACE_CHARS],
-        })
+        self.calls.append(
+            {
+                "purpose": purpose,
+                "model": self.model,
+                "ok": ok,
+                "error": error,
+                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "prompt_tokens": getattr(usage, "prompt_token_count", None),
+                "output_tokens": getattr(usage, "candidates_token_count", None),
+                "prompt": prompt[:MAX_TRACE_CHARS],
+                "response": text[:MAX_TRACE_CHARS],
+            }
+        )
 
 
 def _friendly_error(error: Exception, model: str) -> str:
     message = str(error)
     lowered = message.lower()
-    if "api key not valid" in lowered or "api_key_invalid" in lowered or "permission_denied" in lowered or " 401" in lowered or " 403" in lowered:
+    if (
+        "api key not valid" in lowered
+        or "api_key_invalid" in lowered
+        or "permission_denied" in lowered
+        or " 401" in lowered
+        or " 403" in lowered
+    ):
         return "Gemini rejected the API key. Check it at https://aistudio.google.com/apikey"
-    if "not found" in lowered and "model" in lowered or " 404" in lowered:
+    if ("not found" in lowered and "model" in lowered) or " 404" in lowered:
         return f"Model '{model}' was not found for this key. Pick another model in the sidebar."
     if "resource_exhausted" in lowered or "quota" in lowered or " 429" in lowered:
         return "Gemini quota or rate limit reached. Wait a minute or use a key with more quota."
@@ -119,9 +134,9 @@ def parse_json(text: str) -> dict:
     except json.JSONDecodeError:
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end <= start:
-            raise ValueError("no JSON object found")
+            raise ValueError("no JSON object found") from None
         try:
-            value = json.loads(cleaned[start:end + 1])
+            value = json.loads(cleaned[start : end + 1])
         except json.JSONDecodeError as error:
             raise ValueError(str(error)) from error
     if not isinstance(value, dict):

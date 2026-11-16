@@ -27,30 +27,36 @@ def normalize_requirements(raw: dict) -> dict:
             if isinstance(kpi, str):
                 kpi = {"name": kpi}
             if isinstance(kpi, dict) and str(kpi.get("name", "")).strip():
-                kpis.append({
-                    "name": str(kpi["name"]).strip(),
-                    "definition": str(kpi.get("definition") or "").strip(),
-                    "priority": str(kpi.get("priority") or "medium").lower(),
-                })
+                kpis.append(
+                    {
+                        "name": str(kpi["name"]).strip(),
+                        "definition": str(kpi.get("definition") or "").strip(),
+                        "priority": str(kpi.get("priority") or "medium").lower(),
+                    }
+                )
         visuals = []
         for visual in board.get("visuals") or []:
             if not isinstance(visual, dict) or not visual.get("metric"):
                 continue
             top_n = visual.get("top_n")
-            visuals.append({
-                "title": str(visual.get("title") or "").strip(),
-                "metric": str(visual.get("metric")).strip(),
-                "dimension": str(visual.get("dimension") or "").strip(),
-                "chart_hint": str(visual.get("chart_hint") or "").strip().lower(),
-                "top_n": int(top_n) if isinstance(top_n, (int, float)) or str(top_n).isdigit() else None,
-            })
-        dashboards.append({
-            "name": str(board.get("name") or f"Dashboard {index}").strip(),
-            "purpose": str(board.get("purpose") or "").strip(),
-            "audience": str(board.get("audience") or "").strip(),
-            "kpis": kpis,
-            "visuals": visuals,
-        })
+            visuals.append(
+                {
+                    "title": str(visual.get("title") or "").strip(),
+                    "metric": str(visual.get("metric")).strip(),
+                    "dimension": str(visual.get("dimension") or "").strip(),
+                    "chart_hint": str(visual.get("chart_hint") or "").strip().lower(),
+                    "top_n": int(top_n) if isinstance(top_n, (int, float)) or str(top_n).isdigit() else None,
+                }
+            )
+        dashboards.append(
+            {
+                "name": str(board.get("name") or f"Dashboard {index}").strip(),
+                "purpose": str(board.get("purpose") or "").strip(),
+                "audience": str(board.get("audience") or "").strip(),
+                "kpis": kpis,
+                "visuals": visuals,
+            }
+        )
     if not dashboards:
         raise LLMError("No dashboards were extracted from the BRD")
 

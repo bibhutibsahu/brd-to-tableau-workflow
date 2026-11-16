@@ -13,8 +13,14 @@ import pandas as pd
 import streamlit as st
 
 import config
-from modules.dashboard_generator import (altair_chart, build_preview, filter_values, generate_insights,
-                                         generate_tableau_workbook, star_schema_dot)
+from modules.dashboard_generator import (
+    altair_chart,
+    build_preview,
+    filter_values,
+    generate_insights,
+    generate_tableau_workbook,
+    star_schema_dot,
+)
 from modules.llm_client import LLMClient, LLMError
 from modules.pipeline import PipelineError, run_until_preview
 from modules.visualization_planner import revise_plan, validate_plan
@@ -46,11 +52,15 @@ with st.sidebar:
     st.title("📊 BRD → Tableau AI")
 
     st.subheader("1. Connect Gemini")
-    api_key = st.text_input("Gemini API key", value=config.GEMINI_API_KEY, type="password",
-                            help="Get one at https://aistudio.google.com/apikey. Kept in this browser session's memory "
-                                 "only; never saved to disk.")
+    api_key = st.text_input(
+        "Gemini API key",
+        value=config.GEMINI_API_KEY,
+        type="password",
+        help="Get one at https://aistudio.google.com/apikey. Kept in this browser session's memory "
+        "only; never saved to disk.",
+    )
     default_model = config.GEMINI_MODEL if config.GEMINI_MODEL in MODELS else MODELS[0]
-    model_choice = st.selectbox("Model", MODELS + ["Custom…"], index=(MODELS + ["Custom…"]).index(default_model))
+    model_choice = st.selectbox("Model", [*MODELS, "Custom…"], index=[*MODELS, "Custom…"].index(default_model))
     model = st.text_input("Custom model id", config.GEMINI_MODEL) if model_choice == "Custom…" else model_choice
 
     if st.button("Connect", width="stretch", disabled=not api_key.strip()):
@@ -79,8 +89,9 @@ with st.sidebar:
     use_sample = upload is None and sample.exists() and st.checkbox("Use the included ecommerce BRD", value=True)
     st.caption(f"Database: `{config.DATABASE_PATH.name}`")
 
-    run = st.button("▶ Run pipeline", type="primary", width="stretch",
-                    disabled=llm is None or (upload is None and not use_sample))
+    run = st.button(
+        "▶ Run pipeline", type="primary", width="stretch", disabled=llm is None or (upload is None and not use_sample)
+    )
     if llm is None:
         st.caption("Connect Gemini to run.")
 
@@ -106,7 +117,8 @@ if "state" not in ss:
         "3. **Run pipeline**: Gemini extracts the requirements, maps them to the star schema, and plans the "
         "dashboards; SQL computes every KPI\n"
         "4. **Review** the preview and AI insights, modify charts by hand or in plain English, then **approve**\n"
-        "5. **Download** the Tableau workbook (.twbx)")
+        "5. **Download** the Tableau workbook (.twbx)"
+    )
     st.stop()
 
 state = ss["state"]
@@ -117,17 +129,31 @@ cols = st.columns(5)
 cols[0].metric("Dashboards", len(plan["dashboards"]))
 cols[1].metric("Charts", sum(len(b["charts"]) for b in plan["dashboards"]))
 cols[2].metric("KPIs", len({k for b in plan["dashboards"] for k in b["kpis"]}))
-cols[3].metric("SQL queries", len(state["results"]), f"{sum(1 for r in state['results'] if r['error'])} failed",
-               delta_color="inverse")
+cols[3].metric(
+    "SQL queries",
+    len(state["results"]),
+    f"{sum(1 for r in state['results'] if r['error'])} failed",
+    delta_color="inverse",
+)
 cols[4].metric("Unmapped requirements", len(mapped["unmapped"]))
 
-tabs = st.tabs(["1 · Requirements", "2 · Schema mapping", "3 · SQL & KPI logic", "4 · Preview & review",
-                "5 · Tableau export", "LLM trace"])
+tabs = st.tabs(
+    [
+        "1 · Requirements",
+        "2 · Schema mapping",
+        "3 · SQL & KPI logic",
+        "4 · Preview & review",
+        "5 · Tableau export",
+        "LLM trace",
+    ]
+)
 
 # ------------------------------------------------------------------ 1 requirements
 with tabs[0]:
-    st.caption(f"Source: {state['brd']['source']} · {state['brd']['char_count']:,} characters"
-               f"{' (truncated)' if state['brd']['truncated'] else ''} · extracted by {req.get('extraction_method')}")
+    st.caption(
+        f"Source: {state['brd']['source']} · {state['brd']['char_count']:,} characters"
+        f"{' (truncated)' if state['brd']['truncated'] else ''} · extracted by {req.get('extraction_method')}"
+    )
     if req["business_objective"]:
         st.info(req["business_objective"])
     left, right = st.columns(2)
@@ -157,20 +183,49 @@ with tabs[1]:
         st.graphviz_chart(star_schema_dot(state["schema"]))
     with right:
         st.subheader("Semantic layer")
-        st.write(f"{len(state['semantic']['metrics'])} metrics, {len(state['semantic']['dimensions'])} dimensions. "
-                 f"Mapping: `{mapped['method']}`")
-        st.dataframe(pd.DataFrame(state["semantic"]["dimensions"])[["id", "label", "distinct_count", "temporal"]],
-                     hide_index=True, width="stretch", height=260)
+        st.write(
+            f"{len(state['semantic']['metrics'])} metrics, {len(state['semantic']['dimensions'])} dimensions. "
+            f"Mapping: `{mapped['method']}`"
+        )
+        st.dataframe(
+            pd.DataFrame(state["semantic"]["dimensions"])[["id", "label", "distinct_count", "temporal"]],
+            hide_index=True,
+            width="stretch",
+            height=260,
+        )
     rows = []
     for board in mapped["dashboards"]:
-        rows += [{"dashboard": board["name"], "type": "KPI", "requirement": k["name"], "metric": k["metric_id"],
-                  "dimension": "", "confidence": k["confidence"], "matched by": k["matched_by"]} for k in board["kpis"]]
-        rows += [{"dashboard": board["name"], "type": "Visual", "requirement": v["title"] or v["metric"],
-                  "metric": v["metric_id"], "dimension": v["dimension_id"], "confidence": v["confidence"],
-                  "matched by": v["matched_by"]} for v in board["visuals"]]
+        rows += [
+            {
+                "dashboard": board["name"],
+                "type": "KPI",
+                "requirement": k["name"],
+                "metric": k["metric_id"],
+                "dimension": "",
+                "confidence": k["confidence"],
+                "matched by": k["matched_by"],
+            }
+            for k in board["kpis"]
+        ]
+        rows += [
+            {
+                "dashboard": board["name"],
+                "type": "Visual",
+                "requirement": v["title"] or v["metric"],
+                "metric": v["metric_id"],
+                "dimension": v["dimension_id"],
+                "confidence": v["confidence"],
+                "matched by": v["matched_by"],
+            }
+            for v in board["visuals"]
+        ]
     st.subheader("Requirement → schema mapping")
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
-                 column_config={"confidence": st.column_config.ProgressColumn(min_value=0, max_value=1, format="%.2f")})
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        width="stretch",
+        column_config={"confidence": st.column_config.ProgressColumn(min_value=0, max_value=1, format="%.2f")},
+    )
     if mapped["unmapped"]:
         st.warning("Requirements the database cannot answer yet:")
         st.dataframe(pd.DataFrame(mapped["unmapped"]), hide_index=True, width="stretch")
@@ -199,7 +254,7 @@ with tabs[3]:
 
     if plan["filters"]:
         chosen = {}
-        for col, dim_id in zip(st.columns(len(plan["filters"])), plan["filters"]):
+        for col, dim_id in zip(st.columns(len(plan["filters"])), plan["filters"], strict=True):
             chosen[dim_id] = col.multiselect(dim_label[dim_id], filter_values(dim_id, semantic), key=f"flt_{dim_id}")
         chosen = {k: v for k, v in chosen.items() if v}
         if chosen != ss.get("filters", {}):
@@ -213,8 +268,9 @@ with tabs[3]:
     if top_right.button("✨ Refresh AI insights", disabled=llm is None, width="stretch"):
         with st.spinner("Gemini is reading the numbers…"):
             try:
-                state["insights"] = generate_insights(state["preview"], semantic, llm, req["business_objective"],
-                                                      ss.get("filters"))
+                state["insights"] = generate_insights(
+                    state["preview"], semantic, llm, req["business_objective"], ss.get("filters")
+                )
             except LLMError as error:
                 st.error(str(error))
 
@@ -231,7 +287,7 @@ with tabs[3]:
                 if insight["recommendations"]:
                     st.markdown("**Recommended actions:** " + " · ".join(insight["recommendations"]))
         if board["kpis"]:
-            for col, kpi in zip(st.columns(len(board["kpis"])), board["kpis"]):
+            for col, kpi in zip(st.columns(len(board["kpis"])), board["kpis"], strict=True):
                 col.metric(kpi["label"], kpi["display"])
         chart_cols = st.columns(2)
         for c_index, chart in enumerate(board["charts"]):
@@ -245,34 +301,48 @@ with tabs[3]:
                     st.dataframe(chart["data"], hide_index=True, width="stretch", height=280)
                 else:
                     st.altair_chart(altair_chart(chart, semantic), width="stretch")
-                with st.expander("Modify chart"):
-                    with st.form(f"edit_{b_index}_{chart['id']}"):
-                        kind = st.selectbox("Chart type", list(CHART_LABELS), format_func=CHART_LABELS.get,
-                                            index=list(CHART_LABELS).index(chart["chart"]))
-                        metric = st.selectbox("Metric", metric_ids, format_func=metric_label.get,
-                                              index=metric_ids.index(chart["metric"]))
-                        dimension = st.selectbox("Dimension", dim_ids, format_func=dim_label.get,
-                                                 index=dim_ids.index(chart["dimension"]))
-                        title = st.text_input("Title", chart["title"])
-                        top_n = st.number_input("Top N (0 = all)", 0, 100, chart["top_n"] or 0)
-                        remove = st.checkbox("Remove this chart")
-                        if st.form_submit_button("Apply"):
-                            new_plan = copy.deepcopy(plan)
-                            charts = new_plan["dashboards"][b_index]["charts"]
-                            position = next(i for i, c in enumerate(charts) if c["id"] == chart["id"])
-                            if remove:
-                                charts.pop(position)
-                            else:
-                                charts[position].update({"chart": kind, "metric": metric, "dimension": dimension,
-                                                         "title": title, "top_n": top_n or None})
-                            set_plan(new_plan)
-                            st.rerun()
+                with st.expander("Modify chart"), st.form(f"edit_{b_index}_{chart['id']}"):
+                    kind = st.selectbox(
+                        "Chart type",
+                        list(CHART_LABELS),
+                        format_func=CHART_LABELS.get,
+                        index=list(CHART_LABELS).index(chart["chart"]),
+                    )
+                    metric = st.selectbox(
+                        "Metric", metric_ids, format_func=metric_label.get, index=metric_ids.index(chart["metric"])
+                    )
+                    dimension = st.selectbox(
+                        "Dimension", dim_ids, format_func=dim_label.get, index=dim_ids.index(chart["dimension"])
+                    )
+                    title = st.text_input("Title", chart["title"])
+                    top_n = st.number_input("Top N (0 = all)", 0, 100, chart["top_n"] or 0)
+                    remove = st.checkbox("Remove this chart")
+                    if st.form_submit_button("Apply"):
+                        new_plan = copy.deepcopy(plan)
+                        charts = new_plan["dashboards"][b_index]["charts"]
+                        position = next(i for i, c in enumerate(charts) if c["id"] == chart["id"])
+                        if remove:
+                            charts.pop(position)
+                        else:
+                            charts[position].update(
+                                {
+                                    "chart": kind,
+                                    "metric": metric,
+                                    "dimension": dimension,
+                                    "title": title,
+                                    "top_n": top_n or None,
+                                }
+                            )
+                        set_plan(new_plan)
+                        st.rerun()
         st.divider()
 
     st.subheader("Review")
-    instruction = st.text_area("Ask Gemini for changes in plain English",
-                               placeholder="e.g. Make Net Revenue by Region a horizontal bar, and add Return Rate by "
-                                           "Brand to Product Performance")
+    instruction = st.text_area(
+        "Ask Gemini for changes in plain English",
+        placeholder="e.g. Make Net Revenue by Region a horizontal bar, and add Return Rate by "
+        "Brand to Product Performance",
+    )
     left, right = st.columns(2)
     if left.button("✨ Apply with Gemini", disabled=llm is None or not instruction.strip()):
         with st.spinner("Gemini is revising the plan…"):
@@ -297,8 +367,10 @@ with tabs[4]:
                 st.exception(error)
         export = ss.get("export")
         if export:
-            st.success(f"Workbook written: {len(export['dashboards'])} dashboards, "
-                       f"{len(export['worksheets'])} worksheets. XML validation passed.")
+            st.success(
+                f"Workbook written: {len(export['dashboards'])} dashboards, "
+                f"{len(export['worksheets'])} worksheets. XML validation passed."
+            )
             twbx, twb = Path(export["twbx_path"]), Path(export["twb_path"])
             c1, c2, c3 = st.columns(3)
             c1.download_button("Download .twbx (with data)", twbx.read_bytes(), twbx.name, type="primary")

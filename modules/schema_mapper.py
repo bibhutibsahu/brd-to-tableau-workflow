@@ -34,6 +34,7 @@ Use null when nothing fits; never invent ids. Return ONLY JSON:
 
 # ---------------------------------------------------------------- configuration
 
+
 @lru_cache(maxsize=1)
 def _load_config(path: str) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -50,6 +51,7 @@ def normalize(text: str) -> str:
 
 # ---------------------------------------------------------------- schema
 
+
 def connect(db_path=None) -> sqlite3.Connection:
     path = Path(db_path or config.DATABASE_PATH)
     if not path.exists():
@@ -62,20 +64,30 @@ def introspect_schema(db_path=None) -> dict:
     settings = load_dashboard_config()
     tables = {}
     with connect(db_path) as conn:
-        names = [row[0] for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        names = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
         for name in names:
-            columns = [{"name": col[1], "type": _sql_type(col[2]), "pk": bool(col[5])}
-                       for col in conn.execute(f'PRAGMA table_info("{name}")')]
-            fks = [{"column": fk[3], "ref_table": fk[2], "ref_column": fk[4]}
-                   for fk in conn.execute(f'PRAGMA foreign_key_list("{name}")')]
+            columns = [
+                {"name": col[1], "type": _sql_type(col[2]), "pk": bool(col[5])}
+                for col in conn.execute(f'PRAGMA table_info("{name}")')
+            ]
+            fks = [
+                {"column": fk[3], "ref_table": fk[2], "ref_column": fk[4]}
+                for fk in conn.execute(f'PRAGMA foreign_key_list("{name}")')
+            ]
             rows = conn.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
             tables[name] = {"name": name, "columns": columns, "foreign_keys": fks, "row_count": rows}
 
     fact = _pick_fact(tables, settings.get("fact_table"))
     joins = _joins(tables, fact)
     for name, table in tables.items():
-        table["role"] = "fact" if name == fact else "dimension" if any(j["dim_table"] == name for j in joins) else "unused"
+        table["role"] = (
+            "fact" if name == fact else "dimension" if any(j["dim_table"] == name for j in joins) else "unused"
+        )
     return {"database": str(db_path or config.DATABASE_PATH), "fact_table": fact, "joins": joins, "tables": tables}
 
 
@@ -91,8 +103,11 @@ def _sql_type(declared: str) -> str:
 def _pick_fact(tables: dict, preferred: str | None) -> str:
     if preferred in tables:
         return preferred
-    scored = sorted(tables.values(), key=lambda t: (len(t["foreign_keys"]), t["name"].startswith("fact"), t["row_count"]),
-                    reverse=True)
+    scored = sorted(
+        tables.values(),
+        key=lambda t: (len(t["foreign_keys"]), t["name"].startswith("fact"), t["row_count"]),
+        reverse=True,
+    )
     if not scored:
         raise ValueError("The database has no tables")
     return scored[0]["name"]
@@ -118,6 +133,7 @@ def _joins(tables: dict, fact: str) -> list:
 
 # ---------------------------------------------------------------- semantic layer
 
+
 def build_semantic_layer(schema: dict, db_path=None) -> dict:
     """Metrics whose columns exist in the fact table, and every usable dimension column."""
     settings = load_dashboard_config()
@@ -138,8 +154,9 @@ def build_semantic_layer(schema: dict, db_path=None) -> dict:
     for join in schema["joins"]:
         table = schema["tables"][join["dim_table"]]
         candidates += [(table["name"], col) for col in table["columns"] if not col["pk"]]
-    candidates += [(fact, col) for col in schema["tables"][fact]["columns"]
-                   if col["type"] == "string" and not col["pk"]]
+    candidates += [
+        (fact, col) for col in schema["tables"][fact]["columns"] if col["type"] == "string" and not col["pk"]
+    ]
 
     dimensions = []
     with connect(db_path or schema["database"]) as conn:
@@ -150,15 +167,21 @@ def build_semantic_layer(schema: dict, db_path=None) -> dict:
             distinct = conn.execute(f'SELECT COUNT(DISTINCT "{name}") FROM "{table}"').fetchone()[0]
             if distinct < 2:
                 continue
-            dimensions.append({
-                "id": f"{table}.{name}", "table": table, "column": name,
-                "label": labels.get(name, name.replace("_", " ").title()),
-                "temporal": name in temporal, "distinct_count": distinct,
-            })
+            dimensions.append(
+                {
+                    "id": f"{table}.{name}",
+                    "table": table,
+                    "column": name,
+                    "label": labels.get(name, name.replace("_", " ").title()),
+                    "temporal": name in temporal,
+                    "distinct_count": distinct,
+                }
+            )
     return {"fact_table": fact, "metrics": metrics, "unavailable_metrics": missing, "dimensions": dimensions}
 
 
 # ---------------------------------------------------------------- matching
+
 
 def _tokens(text: str) -> set:
     stop = {"by", "of", "the", "and", "per", "total", "count", "number", "rate", "a", "in", "for", "wise"}
@@ -190,7 +213,9 @@ def match_metric(name: str, semantic: dict, threshold: float = 0.45):
     ids = {m["id"] for m in semantic["metrics"]}
     if name in ids:
         return name, 1.0
-    scored = [(_score(name, [m["label"], m["id"].replace("_", " ")] + m["synonyms"]), m["id"]) for m in semantic["metrics"]]
+    scored = [
+        (_score(name, [m["label"], m["id"].replace("_", " ")] + m["synonyms"]), m["id"]) for m in semantic["metrics"]
+    ]
     score, metric_id = max(scored, default=(0.0, None))
     return (metric_id, round(score, 2)) if score >= threshold else (None, round(score, 2))
 
@@ -253,29 +278,52 @@ def map_requirements(requirements: dict, semantic: dict, llm) -> dict:
     for b, board in enumerate(requirements["dashboards"]):
         kpis = []
         for k, kpi in enumerate(board["kpis"]):
+
             def fuzzy_kpi(kpi=kpi):
                 found = match_metric(kpi["name"] + " " + kpi.get("definition", ""), semantic)
                 return found if found[0] else match_metric(kpi["name"], semantic)
+
             metric_id, confidence, source = _resolve(llm_map, f"d{b}k{k}", 0, metric_ids, fuzzy_kpi)
             kpis.append({**kpi, "metric_id": metric_id, "confidence": confidence, "matched_by": source})
             if metric_id is None:
-                unmapped.append({"dashboard": board["name"], "type": "kpi", "name": kpi["name"],
-                                 "reason": "No catalog KPI or database column matches this requirement."})
+                unmapped.append(
+                    {
+                        "dashboard": board["name"],
+                        "type": "kpi",
+                        "name": kpi["name"],
+                        "reason": "No catalog KPI or database column matches this requirement.",
+                    }
+                )
 
         visuals = []
         for v, visual in enumerate(board["visuals"]):
             key = f"d{b}v{v}"
-            metric_id, m_conf, m_src = _resolve(llm_map, key, 0, metric_ids,
-                                                lambda visual=visual: match_metric(visual["metric"], semantic))
-            dimension_id, d_conf, d_src = _resolve(llm_map, key, 1, dim_ids,
-                                                   lambda visual=visual: match_dimension(visual["dimension"], semantic))
+            metric_id, m_conf, m_src = _resolve(
+                llm_map, key, 0, metric_ids, lambda visual=visual: match_metric(visual["metric"], semantic)
+            )
+            dimension_id, d_conf, d_src = _resolve(
+                llm_map, key, 1, dim_ids, lambda visual=visual: match_dimension(visual["dimension"], semantic)
+            )
             source = m_src if m_src == d_src else f"metric: {m_src}; dimension: {d_src}"
-            visuals.append({**visual, "metric_id": metric_id, "dimension_id": dimension_id,
-                            "confidence": min(m_conf, d_conf), "matched_by": source})
+            visuals.append(
+                {
+                    **visual,
+                    "metric_id": metric_id,
+                    "dimension_id": dimension_id,
+                    "confidence": min(m_conf, d_conf),
+                    "matched_by": source,
+                }
+            )
             if metric_id is None or dimension_id is None:
                 missing = "metric" if metric_id is None else "dimension"
-                unmapped.append({"dashboard": board["name"], "type": "visual", "name": visual["title"] or visual["metric"],
-                                 "reason": f"No matching {missing} for '{visual['metric'] if metric_id is None else visual['dimension']}'."})
+                unmapped.append(
+                    {
+                        "dashboard": board["name"],
+                        "type": "visual",
+                        "name": visual["title"] or visual["metric"],
+                        "reason": f"No matching {missing} for '{visual['metric'] if metric_id is None else visual['dimension']}'.",
+                    }
+                )
         dashboards.append({**board, "kpis": kpis, "visuals": visuals})
 
     filters = []
@@ -284,22 +332,31 @@ def map_requirements(requirements: dict, semantic: dict, llm) -> dict:
         if dim_id and dim_id not in filters:
             filters.append(dim_id)
         elif not dim_id:
-            unmapped.append({"dashboard": "(global)", "type": "filter", "name": name, "reason": "No matching dimension."})
+            unmapped.append(
+                {"dashboard": "(global)", "type": "filter", "name": name, "reason": "No matching dimension."}
+            )
 
     return {"method": method, "dashboards": dashboards, "filters": filters, "unmapped": unmapped}
 
 
 def _llm_mapping(requirements: dict, semantic: dict, llm) -> dict:
-    metrics = "\n".join(f"- {m['id']}: {m['label']} - {m['description']} - {', '.join(m['synonyms'])}"
-                        for m in semantic["metrics"])
+    metrics = "\n".join(
+        f"- {m['id']}: {m['label']} - {m['description']} - {', '.join(m['synonyms'])}" for m in semantic["metrics"]
+    )
     dimensions = "\n".join(f"- {d['id']}: {d['label']}" for d in semantic["dimensions"])
     items = {"kpis": [], "visuals": [], "filters": []}
     for b, board in enumerate(requirements["dashboards"]):
-        items["kpis"] += [{"key": f"d{b}k{k}", "name": kpi["name"], "definition": kpi.get("definition", "")}
-                          for k, kpi in enumerate(board["kpis"])]
-        items["visuals"] += [{"key": f"d{b}v{v}", "metric": vis["metric"], "dimension": vis["dimension"], "title": vis["title"]}
-                             for v, vis in enumerate(board["visuals"])]
-    items["filters"] = [{"key": f"f{i}", "name": name} for i, name in enumerate(requirements.get("global_filters") or [])]
+        items["kpis"] += [
+            {"key": f"d{b}k{k}", "name": kpi["name"], "definition": kpi.get("definition", "")}
+            for k, kpi in enumerate(board["kpis"])
+        ]
+        items["visuals"] += [
+            {"key": f"d{b}v{v}", "metric": vis["metric"], "dimension": vis["dimension"], "title": vis["title"]}
+            for v, vis in enumerate(board["visuals"])
+        ]
+    items["filters"] = [
+        {"key": f"f{i}", "name": name} for i, name in enumerate(requirements.get("global_filters") or [])
+    ]
 
     reply = llm.generate_json(
         MAPPING_PROMPT.format(metrics=metrics, dimensions=dimensions, requirements=json.dumps(items, indent=1)),
@@ -309,7 +366,11 @@ def _llm_mapping(requirements: dict, semantic: dict, llm) -> dict:
     for item in reply.get("kpis") or []:
         result[str(item.get("key"))] = (item.get("metric_id"), float(item.get("confidence") or 0.7))
     for item in reply.get("visuals") or []:
-        result[str(item.get("key"))] = (item.get("metric_id"), item.get("dimension_id"), float(item.get("confidence") or 0.7))
+        result[str(item.get("key"))] = (
+            item.get("metric_id"),
+            item.get("dimension_id"),
+            float(item.get("confidence") or 0.7),
+        )
     for index, item in enumerate(reply.get("filters") or []):
         key = str(item.get("key") or f"f{index}")
         result[key] = (item.get("dimension_id"), 0.7)

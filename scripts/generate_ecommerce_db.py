@@ -18,7 +18,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import DATABASE_PATH  # noqa: E402
+from config import DATABASE_PATH
 
 random.seed(42)
 
@@ -28,21 +28,33 @@ NUM_ORDERS = 5200
 
 PRODUCTS = {
     # category: (sub_category, brands, price range, cost ratio, return rate)
-    "Electronics": [("Mobiles", ["Nova", "Pixelon", "Zentro"], (9000, 45000), 0.84, 0.06),
-                    ("Audio", ["SoundMax", "Beatz", "Nova"], (900, 12000), 0.62, 0.08),
-                    ("Accessories", ["Zentro", "Plugit"], (199, 2500), 0.48, 0.05)],
-    "Fashion": [("Men", ["UrbanLane", "Kraft"], (499, 3999), 0.42, 0.22),
-                ("Women", ["Aurelia", "UrbanLane"], (599, 4999), 0.40, 0.26),
-                ("Footwear", ["StrideOn", "Kraft"], (799, 5999), 0.45, 0.18)],
-    "Home & Kitchen": [("Cookware", ["ChefPro", "HomeNest"], (499, 6999), 0.58, 0.07),
-                       ("Decor", ["HomeNest", "Artisa"], (299, 3999), 0.46, 0.09),
-                       ("Appliances", ["ChefPro", "Voltix"], (1999, 18999), 0.72, 0.06)],
-    "Beauty": [("Skincare", ["Glowé", "PureLeaf"], (199, 1999), 0.44, 0.04),
-               ("Haircare", ["PureLeaf", "Silkara"], (149, 1299), 0.46, 0.03)],
-    "Sports": [("Fitness", ["FitCore", "Ironclad"], (399, 9999), 0.55, 0.06),
-               ("Outdoor", ["TrailX", "FitCore"], (599, 7999), 0.56, 0.07)],
-    "Books": [("Fiction", ["PageTurn", "InkWell"], (199, 799), 0.66, 0.02),
-              ("Non-Fiction", ["InkWell", "PageTurn"], (249, 1299), 0.65, 0.02)],
+    "Electronics": [
+        ("Mobiles", ["Nova", "Pixelon", "Zentro"], (9000, 45000), 0.84, 0.06),
+        ("Audio", ["SoundMax", "Beatz", "Nova"], (900, 12000), 0.62, 0.08),
+        ("Accessories", ["Zentro", "Plugit"], (199, 2500), 0.48, 0.05),
+    ],
+    "Fashion": [
+        ("Men", ["UrbanLane", "Kraft"], (499, 3999), 0.42, 0.22),
+        ("Women", ["Aurelia", "UrbanLane"], (599, 4999), 0.40, 0.26),
+        ("Footwear", ["StrideOn", "Kraft"], (799, 5999), 0.45, 0.18),
+    ],
+    "Home & Kitchen": [
+        ("Cookware", ["ChefPro", "HomeNest"], (499, 6999), 0.58, 0.07),
+        ("Decor", ["HomeNest", "Artisa"], (299, 3999), 0.46, 0.09),
+        ("Appliances", ["ChefPro", "Voltix"], (1999, 18999), 0.72, 0.06),
+    ],
+    "Beauty": [
+        ("Skincare", ["Glowé", "PureLeaf"], (199, 1999), 0.44, 0.04),
+        ("Haircare", ["PureLeaf", "Silkara"], (149, 1299), 0.46, 0.03),
+    ],
+    "Sports": [
+        ("Fitness", ["FitCore", "Ironclad"], (399, 9999), 0.55, 0.06),
+        ("Outdoor", ["TrailX", "FitCore"], (599, 7999), 0.56, 0.07),
+    ],
+    "Books": [
+        ("Fiction", ["PageTurn", "InkWell"], (199, 799), 0.66, 0.02),
+        ("Non-Fiction", ["InkWell", "PageTurn"], (249, 1299), 0.65, 0.02),
+    ],
 }
 NOUNS = {
     "Mobiles": ["Smartphone 5G", "Smartphone Lite", "Smartphone Pro"],
@@ -62,16 +74,26 @@ NOUNS = {
     "Non-Fiction": ["Finance Guide", "Self-Help Book", "History Atlas"],
 }
 CITIES = [
-    ("Delhi", "Delhi", "North", "Tier 1"), ("Gurugram", "Haryana", "North", "Tier 1"),
-    ("Jaipur", "Rajasthan", "North", "Tier 2"), ("Lucknow", "Uttar Pradesh", "North", "Tier 2"),
-    ("Chandigarh", "Chandigarh", "North", "Tier 2"), ("Mumbai", "Maharashtra", "West", "Tier 1"),
-    ("Pune", "Maharashtra", "West", "Tier 1"), ("Ahmedabad", "Gujarat", "West", "Tier 2"),
-    ("Surat", "Gujarat", "West", "Tier 2"), ("Indore", "Madhya Pradesh", "West", "Tier 3"),
-    ("Bengaluru", "Karnataka", "South", "Tier 1"), ("Chennai", "Tamil Nadu", "South", "Tier 1"),
-    ("Hyderabad", "Telangana", "South", "Tier 1"), ("Kochi", "Kerala", "South", "Tier 2"),
-    ("Coimbatore", "Tamil Nadu", "South", "Tier 3"), ("Kolkata", "West Bengal", "East", "Tier 1"),
-    ("Bhubaneswar", "Odisha", "East", "Tier 2"), ("Patna", "Bihar", "East", "Tier 3"),
-    ("Guwahati", "Assam", "East", "Tier 3"), ("Ranchi", "Jharkhand", "East", "Tier 3"),
+    ("Delhi", "Delhi", "North", "Tier 1"),
+    ("Gurugram", "Haryana", "North", "Tier 1"),
+    ("Jaipur", "Rajasthan", "North", "Tier 2"),
+    ("Lucknow", "Uttar Pradesh", "North", "Tier 2"),
+    ("Chandigarh", "Chandigarh", "North", "Tier 2"),
+    ("Mumbai", "Maharashtra", "West", "Tier 1"),
+    ("Pune", "Maharashtra", "West", "Tier 1"),
+    ("Ahmedabad", "Gujarat", "West", "Tier 2"),
+    ("Surat", "Gujarat", "West", "Tier 2"),
+    ("Indore", "Madhya Pradesh", "West", "Tier 3"),
+    ("Bengaluru", "Karnataka", "South", "Tier 1"),
+    ("Chennai", "Tamil Nadu", "South", "Tier 1"),
+    ("Hyderabad", "Telangana", "South", "Tier 1"),
+    ("Kochi", "Kerala", "South", "Tier 2"),
+    ("Coimbatore", "Tamil Nadu", "South", "Tier 3"),
+    ("Kolkata", "West Bengal", "East", "Tier 1"),
+    ("Bhubaneswar", "Odisha", "East", "Tier 2"),
+    ("Patna", "Bihar", "East", "Tier 3"),
+    ("Guwahati", "Assam", "East", "Tier 3"),
+    ("Ranchi", "Jharkhand", "East", "Tier 3"),
 ]
 CHANNELS = {"Website": "Desktop", "Mobile App": "Mobile", "Marketplace": "Mixed"}
 SOURCES = ["Organic Search", "Paid Search", "Social Media", "Email", "Direct", "Affiliate"]
@@ -88,8 +110,7 @@ PROMOS = [
     ("PR09", "Independence Day Sale", "Seasonal", 18, date(2026, 8, 8), date(2026, 8, 17)),
 ]
 SEGMENT_WEIGHT = {"VIP": 9.0, "Loyal": 4.0, "Regular": 1.6, "Occasional": 0.6}
-PAYMENTS = (["UPI", "Credit Card", "Debit Card", "Cash on Delivery", "Wallet", "Net Banking"],
-            [42, 18, 12, 17, 7, 4])
+PAYMENTS = (["UPI", "Credit Card", "Debit Card", "Cash on Delivery", "Wallet", "Net Banking"], [42, 18, 12, 17, 7, 4])
 
 DDL = """
 DROP TABLE IF EXISTS fact_sales;
@@ -136,9 +157,20 @@ def build_dates():
     rows, day = [], START
     while day <= END:
         festive = date(2025, 10, 1) <= day <= date(2025, 11, 15)
-        rows.append((day.isoformat(), day.isoformat(), str(day.year), f"Q{(day.month - 1) // 3 + 1} {day.year}",
-                     day.strftime("%Y-%m"), day.strftime("%B"), f"W{day.isocalendar()[1]:02d}",
-                     day.strftime("%A"), "Yes" if day.weekday() >= 5 else "No", "Yes" if festive else "No"))
+        rows.append(
+            (
+                day.isoformat(),
+                day.isoformat(),
+                str(day.year),
+                f"Q{(day.month - 1) // 3 + 1} {day.year}",
+                day.strftime("%Y-%m"),
+                day.strftime("%B"),
+                f"W{day.isocalendar()[1]:02d}",
+                day.strftime("%A"),
+                "Yes" if day.weekday() >= 5 else "No",
+                "Yes" if festive else "No",
+            )
+        )
         day += timedelta(days=1)
     return rows
 
@@ -161,19 +193,47 @@ def build_products():
 
 def build_customers():
     rows, weights = [], {}
-    first = ["Aarav", "Diya", "Kabir", "Ananya", "Vihaan", "Isha", "Arjun", "Meera", "Rohan", "Sara",
-             "Aditya", "Nisha", "Karan", "Priya", "Dev", "Riya", "Neel", "Tara", "Yash", "Zoya"]
+    first = [
+        "Aarav",
+        "Diya",
+        "Kabir",
+        "Ananya",
+        "Vihaan",
+        "Isha",
+        "Arjun",
+        "Meera",
+        "Rohan",
+        "Sara",
+        "Aditya",
+        "Nisha",
+        "Karan",
+        "Priya",
+        "Dev",
+        "Riya",
+        "Neel",
+        "Tara",
+        "Yash",
+        "Zoya",
+    ]
     last = ["Sharma", "Iyer", "Patel", "Reddy", "Das", "Khan", "Menon", "Singh", "Gupta", "Nair"]
     for i in range(1, NUM_CUSTOMERS + 1):
         segment = random.choices(list(SEGMENT_WEIGHT), [6, 18, 44, 32])[0]
         signup = START - timedelta(days=random.randint(-300, 900))
         signup = min(signup, END - timedelta(days=5))
         key = f"C{i:05d}"
-        rows.append((key, f"{random.choice(first)} {random.choice(last)}",
-                     random.choices(["Female", "Male", "Other"], [48, 49, 3])[0],
-                     random.choices(["18-24", "25-34", "35-44", "45-54", "55+"], [22, 38, 22, 12, 6])[0],
-                     segment, random.choice(SOURCES), signup.isoformat(), signup.strftime("%Y-%m"),
-                     "Plus Member" if segment in ("VIP", "Loyal") and random.random() < 0.7 else "Standard"))
+        rows.append(
+            (
+                key,
+                f"{random.choice(first)} {random.choice(last)}",
+                random.choices(["Female", "Male", "Other"], [48, 49, 3])[0],
+                random.choices(["18-24", "25-34", "35-44", "45-54", "55+"], [22, 38, 22, 12, 6])[0],
+                segment,
+                random.choice(SOURCES),
+                signup.isoformat(),
+                signup.strftime("%Y-%m"),
+                "Plus Member" if segment in ("VIP", "Loyal") and random.random() < 0.7 else "Standard",
+            )
+        )
         weights[key] = (SEGMENT_WEIGHT[segment], signup, random.randrange(len(CITIES)))
     return rows, weights
 
@@ -211,8 +271,10 @@ def pick_promo(day, first_order, channel):
 
 
 def build_facts(prices, customers):
-    channels = [(f"CH{i:02d}", ch, dev, src) for i, ((ch, dev), src) in enumerate(
-        ((c, s) for c in CHANNELS.items() for s in SOURCES), start=1)]
+    channels = [
+        (f"CH{i:02d}", ch, dev, src)
+        for i, ((ch, dev), src) in enumerate(((c, s) for c in CHANNELS.items() for s in SOURCES), start=1)
+    ]
     keys = list(customers)
     cust_weights = [customers[k][0] for k in keys]
     product_keys = list(prices)
@@ -235,26 +297,60 @@ def build_facts(prices, customers):
         payment = random.choices(*PAYMENTS)[0]
         cancelled = random.random() < (0.07 if payment == "Cash on Delivery" else 0.03)
         in_transit = (END - day).days < 4 and not cancelled
-        delivery = None if cancelled else max(1, int(random.gauss({"Tier 1": 2.2, "Tier 2": 3.6, "Tier 3": 5.1}[tier], 1.1)))
+        delivery = (
+            None if cancelled else max(1, int(random.gauss({"Tier 1": 2.2, "Tier 2": 3.6, "Tier 3": 5.1}[tier], 1.1)))
+        )
         lines = random.choices([1, 2, 3, 4], [55, 27, 12, 6])[0]
         order_shipping = 0 if random.random() < 0.55 else random.choice([40, 60, 80, 99])
         for product in random.sample(random.choices(product_keys, product_weights, k=lines * 2), k=lines):
-            price, cost_ratio, return_rate, _, category = prices[product]
-            qty = random.choices([1, 2, 3], [78, 17, 5])[0] if price > 1500 else random.choices([1, 2, 3, 4], [55, 28, 12, 5])[0]
+            price, cost_ratio, return_rate, _, _category = prices[product]
+            qty = (
+                random.choices([1, 2, 3], [78, 17, 5])[0]
+                if price > 1500
+                else random.choices([1, 2, 3, 4], [55, 28, 12, 5])[0]
+            )
             gross = qty * price
             discount = round(gross * promo[3] / 100, 2)
             net = round(gross - discount, 2)
             cogs = round(qty * price * cost_ratio * random.uniform(0.95, 1.05), 2)
             shipping = round(order_shipping / lines + (35 if price > 5000 else 18) * random.uniform(0.8, 1.2), 2)
-            returned = (not cancelled and not in_transit
-                        and random.random() < return_rate * (1.4 if payment == "Cash on Delivery" else 1.0))
-            status = "Cancelled" if cancelled else "In Transit" if in_transit else "Returned" if returned else "Delivered"
+            returned = (
+                not cancelled
+                and not in_transit
+                and random.random() < return_rate * (1.4 if payment == "Cash on Delivery" else 1.0)
+            )
+            status = (
+                "Cancelled" if cancelled else "In Transit" if in_transit else "Returned" if returned else "Delivered"
+            )
             if cancelled:
                 net = discount = cogs = shipping = 0.0
-            facts.append((f"L{line_no:06d}", f"ORD{number:06d}", day.isoformat(), customer, product,
-                          f"G{geo + 1:03d}", channel[0], promo[0], status, payment, qty, price,
-                          float(gross), discount, net, cogs, round(net - cogs, 2), shipping,
-                          int(returned), net if returned else 0.0, int(cancelled), delivery, int(first_order)))
+            facts.append(
+                (
+                    f"L{line_no:06d}",
+                    f"ORD{number:06d}",
+                    day.isoformat(),
+                    customer,
+                    product,
+                    f"G{geo + 1:03d}",
+                    channel[0],
+                    promo[0],
+                    status,
+                    payment,
+                    qty,
+                    price,
+                    float(gross),
+                    discount,
+                    net,
+                    cogs,
+                    round(net - cogs, 2),
+                    shipping,
+                    int(returned),
+                    net if returned else 0.0,
+                    int(cancelled),
+                    delivery,
+                    int(first_order),
+                )
+            )
             line_no += 1
     return channels, facts
 
@@ -276,8 +372,10 @@ def main():
         conn.executemany("INSERT INTO dim_channel VALUES (?,?,?,?)", channels)
         conn.executemany("INSERT INTO dim_promotion VALUES (?,?,?,?)", promos)
         conn.executemany(f"INSERT INTO fact_sales VALUES ({','.join('?' * 23)})", facts)
-    print(f"Wrote {DATABASE_PATH}: {len(facts)} order lines, {NUM_ORDERS} orders, "
-          f"{len(customers)} customers, {len(products)} products")
+    print(
+        f"Wrote {DATABASE_PATH}: {len(facts)} order lines, {NUM_ORDERS} orders, "
+        f"{len(customers)} customers, {len(products)} products"
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+# Normalise line endings so Windows and macOS/Linux contributors produce identical diffs.
+* text=auto eol=lf
+
+# Windows scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never touch.
+*.db binary
+*.sqlite binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.png binary
+*.jpg binary
+*.twbx binary

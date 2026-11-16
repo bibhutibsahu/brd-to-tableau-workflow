@@ -11,8 +11,8 @@ from modules import twb_builder
 from modules.schema_mapper import connect, load_dashboard_config
 from modules.sql_generator import SQLGenerator, execute
 
-
 # ------------------------------------------------------------------ preview
+
 
 def build_preview(plan: dict, schema: dict, semantic: dict, filters: dict | None = None) -> list:
     """Run every KPI and chart query in the plan. Returns one entry per dashboard."""
@@ -25,12 +25,22 @@ def build_preview(plan: dict, schema: dict, semantic: dict, filters: dict | None
             sql, params = generator.kpi_query(board["kpis"], filters)
             result = execute(sql, params)
             row = result["data"].iloc[0].to_dict() if result["rows"] else {}
-            kpis = [{"metric": m, "label": metrics[m]["label"], "value": row.get(m),
-                     "display": format_value(row.get(m), metrics[m]["format"]), "sql": sql, "error": result["error"]}
-                    for m in board["kpis"]]
+            kpis = [
+                {
+                    "metric": m,
+                    "label": metrics[m]["label"],
+                    "value": row.get(m),
+                    "display": format_value(row.get(m), metrics[m]["format"]),
+                    "sql": sql,
+                    "error": result["error"],
+                }
+                for m in board["kpis"]
+            ]
         charts = []
         for chart in board["charts"]:
-            sql, params = generator.chart_query(chart["metric"], chart["dimension"], filters, chart["sort"], chart["top_n"])
+            sql, params = generator.chart_query(
+                chart["metric"], chart["dimension"], filters, chart["sort"], chart["top_n"]
+            )
             charts.append({**chart, "sql": sql, **execute(sql, params)})
         preview.append({"name": board["name"], "purpose": board.get("purpose", ""), "kpis": kpis, "charts": charts})
     return preview
@@ -62,18 +72,26 @@ def altair_chart(chart: dict, semantic: dict):
     x_field, y_field = dim["column"], chart["metric"]
     axis_format = {"percent": ".1%", "decimal": ",.2f"}.get(metric["format"], ",.0f")
     measure = alt.Y(y_field, title=metric["label"], axis=alt.Axis(format=axis_format))
-    tooltip = [alt.Tooltip(x_field, title=dim["label"]), alt.Tooltip(y_field, title=metric["label"], format=axis_format)]
+    tooltip = [
+        alt.Tooltip(x_field, title=dim["label"]),
+        alt.Tooltip(y_field, title=metric["label"], format=axis_format),
+    ]
     base = alt.Chart(data).properties(height=280)
 
     if chart["chart"] == "line":
-        return base.mark_line(point=True).encode(x=alt.X(x_field, title=dim["label"], sort=None), y=measure, tooltip=tooltip)
+        return base.mark_line(point=True).encode(
+            x=alt.X(x_field, title=dim["label"], sort=None), y=measure, tooltip=tooltip
+        )
     if chart["chart"] == "pie":
-        return base.mark_arc(innerRadius=50).encode(theta=alt.Theta(y_field, type="quantitative"),
-                                                   color=alt.Color(x_field, title=dim["label"]), tooltip=tooltip)
+        return base.mark_arc(innerRadius=50).encode(
+            theta=alt.Theta(y_field, type="quantitative"), color=alt.Color(x_field, title=dim["label"]), tooltip=tooltip
+        )
     if chart["chart"] == "horizontal_bar":
-        return base.mark_bar().encode(y=alt.Y(x_field, title=None, sort="-x" if chart["sort"] != "asc" else "x"),
-                                      x=alt.X(y_field, title=metric["label"], axis=alt.Axis(format=axis_format)),
-                                      tooltip=tooltip)
+        return base.mark_bar().encode(
+            y=alt.Y(x_field, title=None, sort="-x" if chart["sort"] != "asc" else "x"),
+            x=alt.X(y_field, title=metric["label"], axis=alt.Axis(format=axis_format)),
+            tooltip=tooltip,
+        )
     if chart["chart"] == "table":
         return None  # rendered as a dataframe by the app
     sort = None if chart["sort"] == "none" else ("-y" if chart["sort"] == "desc" else "y")
@@ -95,18 +113,31 @@ def generate_insights(preview: list, semantic: dict, llm, objective: str = "", f
                 continue
             fmt = metrics[chart["metric"]]["format"]
             column = dims[chart["dimension"]]["column"]
-            rows = [{dims[chart["dimension"]]["label"]: str(row[column]),
-                     metrics[chart["metric"]]["label"]: format_value(row[chart["metric"]], fmt)}
-                    for _, row in chart["data"].head(15).iterrows()]
-            charts.append({"title": chart["title"], "rows": rows,
-                           "rows_total": chart["rows"], "rows_shown": len(rows)})
-        payload.append({"name": board["name"], "purpose": board.get("purpose", ""),
-                        "kpis": {k["label"]: k["display"] for k in board["kpis"]}, "charts": charts})
+            rows = [
+                {
+                    dims[chart["dimension"]]["label"]: str(row[column]),
+                    metrics[chart["metric"]]["label"]: format_value(row[chart["metric"]], fmt),
+                }
+                for _, row in chart["data"].head(15).iterrows()
+            ]
+            charts.append({"title": chart["title"], "rows": rows, "rows_total": chart["rows"], "rows_shown": len(rows)})
+        payload.append(
+            {
+                "name": board["name"],
+                "purpose": board.get("purpose", ""),
+                "kpis": {k["label"]: k["display"] for k in board["kpis"]},
+                "charts": charts,
+            }
+        )
 
-    prompt = (config.PROMPTS_DIR / "insights_prompt.txt").read_text(encoding="utf-8").format(
-        objective=objective or "(not stated)",
-        filters=json.dumps(filters or {}) if filters else "none (all data)",
-        data=json.dumps(payload, indent=1, ensure_ascii=False),
+    prompt = (
+        (config.PROMPTS_DIR / "insights_prompt.txt")
+        .read_text(encoding="utf-8")
+        .format(
+            objective=objective or "(not stated)",
+            filters=json.dumps(filters or {}) if filters else "none (all data)",
+            data=json.dumps(payload, indent=1, ensure_ascii=False),
+        )
     )
     reply = llm.generate_json(prompt, purpose="insights")
     names = {board["name"] for board in preview}
@@ -125,17 +156,21 @@ def filter_values(dimension_id: str, semantic: dict) -> list:
     """Distinct values of a dimension, for preview filter widgets."""
     dim = next(d for d in semantic["dimensions"] if d["id"] == dimension_id)
     with connect() as conn:
-        rows = conn.execute(f'SELECT DISTINCT "{dim["column"]}" FROM "{dim["table"]}" '
-                            f'WHERE "{dim["column"]}" IS NOT NULL ORDER BY 1').fetchall()
+        rows = conn.execute(
+            f'SELECT DISTINCT "{dim["column"]}" FROM "{dim["table"]}" WHERE "{dim["column"]}" IS NOT NULL ORDER BY 1'
+        ).fetchall()
     return [row[0] for row in rows]
 
 
 def star_schema_dot(schema: dict) -> str:
     """Graphviz DOT for the star schema diagram in the app."""
     fact = schema["fact_table"]
-    lines = ["digraph G {", "rankdir=LR; bgcolor=transparent;",
-             "node [shape=box, style='rounded,filled', fontname=Helvetica, fontsize=11];",
-             f'"{fact}" [fillcolor="#1f3a5f", fontcolor=white, label="{fact}\\n{schema["tables"][fact]["row_count"]:,} rows"];']
+    lines = [
+        "digraph G {",
+        "rankdir=LR; bgcolor=transparent;",
+        "node [shape=box, style='rounded,filled', fontname=Helvetica, fontsize=11];",
+        f'"{fact}" [fillcolor="#1f3a5f", fontcolor=white, label="{fact}\\n{schema["tables"][fact]["row_count"]:,} rows"];',
+    ]
     for join in schema["joins"]:
         table = schema["tables"][join["dim_table"]]
         lines.append(f'"{table["name"]}" [fillcolor="#dbe7f5", label="{table["name"]}\\n{table["row_count"]:,} rows"];')
@@ -145,6 +180,7 @@ def star_schema_dot(schema: dict) -> str:
 
 
 # ------------------------------------------------------------------ Tableau export
+
 
 def slug(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_") or "workbook"
@@ -187,7 +223,13 @@ def generate_tableau_workbook(plan: dict, schema: dict, semantic: dict, output_d
             archive.write(path, f"Data/{path.name}")
 
     plan_path = folder / "approved_plan.json"
-    plan_path.write_text(json.dumps({**plan, "approved_at": datetime.now().isoformat(timespec="seconds")}, indent=2),
-                         encoding="utf-8")
-    return {"twb_path": str(twb_path), "twbx_path": str(twbx_path), "plan_path": str(plan_path),
-            "data_files": [str(p) for p in csv_paths], **index}
+    plan_path.write_text(
+        json.dumps({**plan, "approved_at": datetime.now().isoformat(timespec="seconds")}, indent=2), encoding="utf-8"
+    )
+    return {
+        "twb_path": str(twb_path),
+        "twbx_path": str(twbx_path),
+        "plan_path": str(plan_path),
+        "data_files": [str(p) for p in csv_paths],
+        **index,
+    }

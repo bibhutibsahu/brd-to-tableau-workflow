@@ -12,8 +12,14 @@ FORMATS = {"percent": "p0.0%", "decimal": "n#,##0.00", "number": "n#,##0"}
 
 
 def esc(value) -> str:
-    return (str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            .replace('"', "&quot;").replace("'", "&apos;"))
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
 
 
 def br(name: str) -> str:
@@ -37,8 +43,9 @@ class WorkbookModel:
                     name = f"{col['name']} ({table}.csv)"
                 used.add(name)
                 self.fields[(table, col["name"])] = name
-        self.keys = {(self.fact, j["fact_column"]) for j in schema["joins"]} | \
-                    {(j["dim_table"], j["dim_column"]) for j in schema["joins"]}
+        self.keys = {(self.fact, j["fact_column"]) for j in schema["joins"]} | {
+            (j["dim_table"], j["dim_column"]) for j in schema["joins"]
+        }
         self.metrics = {m["id"]: m for m in semantic["metrics"]}
         self.dims = {d["id"]: d for d in semantic["dimensions"]}
         self.labels = {d["id"]: d["label"] for d in semantic["dimensions"]}
@@ -55,11 +62,15 @@ class WorkbookModel:
         kind = self.column_type(table, column)
         datatype = kind
         measure = table == self.fact and kind in ("integer", "real") and (table, column) not in self.keys
-        role, semantic = ("measure", "quantitative") if measure else ("dimension", "nominal" if kind == "string" else "ordinal")
+        role, semantic = (
+            ("measure", "quantitative") if measure else ("dimension", "nominal" if kind == "string" else "ordinal")
+        )
         caption = self.labels.get(f"{table}.{column}", column.replace("_", " ").title())
         hidden = " hidden='true'" if (table, column) in self.keys else ""
-        return (f"<column caption='{esc(caption)}' datatype='{datatype}' name='{esc(br(name))}' "
-                f"role='{role}' type='{semantic}'{hidden} />")
+        return (
+            f"<column caption='{esc(caption)}' datatype='{datatype}' name='{esc(br(name))}' "
+            f"role='{role}' type='{semantic}'{hidden} />"
+        )
 
     # calculated metric fields
     def calc_name(self, metric_id: str) -> str:
@@ -70,9 +81,11 @@ class WorkbookModel:
         fmt = FORMATS.get(metric["format"])
         if metric["format"] == "currency":
             fmt = f'c"{self.currency}"#,##0;-"{self.currency}"#,##0'
-        return (f"<column caption='{esc(metric['label'])}' datatype='real' default-format='{esc(fmt)}' "
-                f"name='{esc(br(self.calc_name(metric_id)))}' role='measure' type='quantitative'>"
-                f"<calculation class='tableau' formula='{esc(metric['tableau'])}' /></column>")
+        return (
+            f"<column caption='{esc(metric['label'])}' datatype='real' default-format='{esc(fmt)}' "
+            f"name='{esc(br(self.calc_name(metric_id)))}' role='measure' type='quantitative'>"
+            f"<calculation class='tableau' formula='{esc(metric['tableau'])}' /></column>"
+        )
 
     def metric_columns(self, metric_id: str) -> list:
         return [(self.fact, col) for col in self.metrics[metric_id]["columns"]]
@@ -86,26 +99,34 @@ class WorkbookModel:
 
 # ------------------------------------------------------------------ data source
 
+
 def datasource_xml(model: WorkbookModel, caption: str, metric_ids: list) -> str:
     def table_relation(table):
         cols = "\n".join(
             f"              <column datatype='{c['type']}' name='{esc(c['name'])}' ordinal='{i}' />"
-            for i, c in enumerate(model.schema["tables"][table]["columns"]))
-        return (f"<relation connection='textscan.0' name='{esc(table)}.csv' table='{esc('[' + table + '#csv]')}' type='table'>\n"
-                f"            <columns character-set='UTF-8' header='yes' outcome='6' separator=','>\n{cols}\n"
-                f"            </columns>\n          </relation>")
+            for i, c in enumerate(model.schema["tables"][table]["columns"])
+        )
+        return (
+            f"<relation connection='textscan.0' name='{esc(table)}.csv' table='{esc('[' + table + '#csv]')}' type='table'>\n"
+            f"            <columns character-set='UTF-8' header='yes' outcome='6' separator=','>\n{cols}\n"
+            f"            </columns>\n          </relation>"
+        )
 
     relation = table_relation(model.fact)
     for join in model.schema["joins"]:
         left = f"[{model.fact}.csv].{br(join['fact_column'])}"
         right = f"[{join['dim_table']}.csv].{br(join['dim_column'])}"
-        relation = (f"<relation join='left' type='join'>\n"
-                    f"          <clause type='join'><expression op='='><expression op='{esc(left)}' />"
-                    f"<expression op='{esc(right)}' /></expression></clause>\n"
-                    f"          {relation}\n          {table_relation(join['dim_table'])}\n        </relation>")
+        relation = (
+            f"<relation join='left' type='join'>\n"
+            f"          <clause type='join'><expression op='='><expression op='{esc(left)}' />"
+            f"<expression op='{esc(right)}' /></expression></clause>\n"
+            f"          {relation}\n          {table_relation(join['dim_table'])}\n        </relation>"
+        )
 
-    maps = "\n".join(f"          <map key='{esc(br(field))}' value='{esc(f'[{table}.csv].' + br(column))}' />"
-                     for (table, column), field in sorted(model.fields.items(), key=lambda kv: kv[1]))
+    maps = "\n".join(
+        f"          <map key='{esc(br(field))}' value='{esc(f'[{table}.csv].' + br(column))}' />"
+        for (table, column), field in sorted(model.fields.items(), key=lambda kv: kv[1])
+    )
     columns = "\n".join("    " + model.column_xml(t, c) for (t, c) in model.fields)
     calcs = "\n".join("    " + model.calc_xml(m) for m in metric_ids)
     return f"""  <datasources>
@@ -138,15 +159,22 @@ def _dependencies(model: WorkbookModel, metric_ids: list, dim_ids: list, indent:
     lines = [f"{indent}<datasource-dependencies datasource='{DS}'>"]
     lines += [indent + "  " + model.column_xml(t, c) for t, c in base]
     lines += [indent + "  " + model.calc_xml(m) for m in metric_ids]
-    lines += [f"{indent}  <column-instance column='{esc(br(model.dim_field(d)))}' derivation='None' "
-              f"name='{esc(model.dim_instance(d))}' pivot='key' type='nominal' />" for d in dim_ids]
-    lines += [f"{indent}  <column-instance column='{esc(br(model.calc_name(m)))}' derivation='User' "
-              f"name='{esc(model.measure_instance(m))}' pivot='key' type='quantitative' />" for m in metric_ids]
+    lines += [
+        f"{indent}  <column-instance column='{esc(br(model.dim_field(d)))}' derivation='None' "
+        f"name='{esc(model.dim_instance(d))}' pivot='key' type='nominal' />"
+        for d in dim_ids
+    ]
+    lines += [
+        f"{indent}  <column-instance column='{esc(br(model.calc_name(m)))}' derivation='User' "
+        f"name='{esc(model.measure_instance(m))}' pivot='key' type='quantitative' />"
+        for m in metric_ids
+    ]
     lines.append(f"{indent}</datasource-dependencies>")
     return "\n".join(lines)
 
 
 # ------------------------------------------------------------------ worksheets
+
 
 def worksheet_xml(model: WorkbookModel, caption: str, sheet: dict, filters: list) -> str:
     """sheet: {name, chart, metric, dimension, sort, top_n, label}"""
@@ -161,14 +189,18 @@ def worksheet_xml(model: WorkbookModel, caption: str, sheet: dict, filters: list
     if chart == "kpi":
         mark = "Text"
         encodings = f"<encodings><text column='{esc(measure)}' /></encodings>"
-        label = ("<customized-label><formatted-text>"
-                 f"<run fontcolor='#6b7280' fontsize='11'>{esc(sheet['label'])}</run><run>Æ&#10;</run>"
-                 f"<run bold='true' fontsize='22'>&lt;{esc(measure)}&gt;</run></formatted-text></customized-label>")
+        label = (
+            "<customized-label><formatted-text>"
+            f"<run fontcolor='#6b7280' fontsize='11'>{esc(sheet['label'])}</run><run>Æ&#10;</run>"
+            f"<run bold='true' fontsize='22'>&lt;{esc(measure)}&gt;</run></formatted-text></customized-label>"
+        )
         style = "<format attr='text-align' value='center' />"
     elif chart == "pie":
         mark = "Pie"
-        encodings = (f"<encodings><color column='{esc(dimension)}' /><wedge-size column='{esc(measure)}' />"
-                     f"<text column='{esc(dimension)}' /><text column='{esc(measure)}' /></encodings>")
+        encodings = (
+            f"<encodings><color column='{esc(dimension)}' /><wedge-size column='{esc(measure)}' />"
+            f"<text column='{esc(dimension)}' /><text column='{esc(measure)}' /></encodings>"
+        )
         style += "<format attr='size' value='2' />"
     elif chart == "horizontal_bar":
         rows, cols = dimension, measure
@@ -184,16 +216,20 @@ def worksheet_xml(model: WorkbookModel, caption: str, sheet: dict, filters: list
     view_extra = ""
     if dim_id and sheet.get("top_n"):
         level = model.dim_instance(dim_id)
-        view_extra += (f"\n          <filter class='categorical' column='{esc(dimension)}'>"
-                       f"<groupfilter count='{int(sheet['top_n'])}' end='top' function='end' units='records' "
-                       f"user:ui-marker='end' user:ui-top-by-field='true'>"
-                       f"<groupfilter direction='DESC' expression='{esc(model.metrics[metric_id]['tableau'])}' "
-                       f"function='order' user:ui-marker='order'>"
-                       f"<groupfilter function='level-members' level='{esc(level)}' user:ui-enumeration='all' "
-                       f"user:ui-marker='enumerate' /></groupfilter></groupfilter></filter>")
+        view_extra += (
+            f"\n          <filter class='categorical' column='{esc(dimension)}'>"
+            f"<groupfilter count='{int(sheet['top_n'])}' end='top' function='end' units='records' "
+            f"user:ui-marker='end' user:ui-top-by-field='true'>"
+            f"<groupfilter direction='DESC' expression='{esc(model.metrics[metric_id]['tableau'])}' "
+            f"function='order' user:ui-marker='order'>"
+            f"<groupfilter function='level-members' level='{esc(level)}' user:ui-enumeration='all' "
+            f"user:ui-marker='enumerate' /></groupfilter></groupfilter></filter>"
+        )
     if dim_id and chart != "kpi" and sheet.get("sort") in ("asc", "desc"):
         direction = "ASC" if sheet["sort"] == "asc" else "DESC"
-        view_extra += f"\n          <computed-sort column='{esc(dimension)}' direction='{direction}' using='{esc(measure)}' />"
+        view_extra += (
+            f"\n          <computed-sort column='{esc(dimension)}' direction='{direction}' using='{esc(measure)}' />"
+        )
     if dim_id and sheet.get("top_n"):
         view_extra += f"\n          <slices><column>{esc(dimension)}</column></slices>"
 
@@ -232,7 +268,9 @@ def shared_filters_xml(model: WorkbookModel, caption: str, filters: list) -> str
     body = "\n".join(
         f"      <filter class='categorical' column='[{DS}].{esc(model.dim_instance(d))}'>\n"
         f"        <groupfilter function='level-members' level='{esc(model.dim_instance(d))}' "
-        "user:ui-enumeration='all' user:ui-marker='enumerate' />\n      </filter>" for d in filters)
+        "user:ui-enumeration='all' user:ui-marker='enumerate' />\n      </filter>"
+        for d in filters
+    )
     slices = "\n".join(f"        <column>[{DS}].{esc(model.dim_instance(d))}</column>" for d in filters)
     return f"""  <shared-views>
     <shared-view name='{DS}'>
@@ -252,8 +290,10 @@ def shared_filters_xml(model: WorkbookModel, caption: str, filters: list) -> str
 
 # ------------------------------------------------------------------ dashboards
 
-def dashboard_xml(model: WorkbookModel, board: dict, kpi_sheets: list, chart_sheets: list,
-                  filters: list, zone_start: int) -> tuple:
+
+def dashboard_xml(
+    model: WorkbookModel, board: dict, kpi_sheets: list, chart_sheets: list, filters: list, zone_start: int
+) -> tuple:
     """Title row, KPI row, two-column chart grid, filter column on the right. Units: 1/100000."""
     full, side = 100000, (16000 if filters else 0)
     body = full - side
@@ -262,28 +302,36 @@ def dashboard_xml(model: WorkbookModel, board: dict, kpi_sheets: list, chart_she
     rows = max(1, (len(chart_sheets) + 1) // 2)
     chart_h = (full - top) // rows
     zid = zone_start
-    zones = [f"        <zone h='{title_h}' id='{zid}' type-v2='text' w='{full}' x='0' y='0'>"
-             f"<formatted-text><run bold='true' fontsize='20'>{esc(board['name'])}</run>"
-             f"<run fontcolor='#6b7280' fontsize='11'>{esc('   ' + board.get('purpose', ''))}</run></formatted-text></zone>"]
+    zones = [
+        f"        <zone h='{title_h}' id='{zid}' type-v2='text' w='{full}' x='0' y='0'>"
+        f"<formatted-text><run bold='true' fontsize='20'>{esc(board['name'])}</run>"
+        f"<run fontcolor='#6b7280' fontsize='11'>{esc('   ' + board.get('purpose', ''))}</run></formatted-text></zone>"
+    ]
     for i, name in enumerate(kpi_sheets):
         zid += 1
         width = body // len(kpi_sheets)
-        zones.append(f"        <zone h='{kpi_h}' id='{zid}' name='{esc(name)}' show-title='false' "
-                     f"w='{width}' x='{i * width}' y='{title_h}' />")
+        zones.append(
+            f"        <zone h='{kpi_h}' id='{zid}' name='{esc(name)}' show-title='false' "
+            f"w='{width}' x='{i * width}' y='{title_h}' />"
+        )
     for i, name in enumerate(chart_sheets):
         zid += 1
         last_odd = len(chart_sheets) % 2 == 1 and i == len(chart_sheets) - 1
         width = body if (len(chart_sheets) == 1 or last_odd) else body // 2
         x = 0 if last_odd else (i % 2) * (body // 2)
-        zones.append(f"        <zone h='{chart_h}' id='{zid}' name='{esc(name)}' w='{width}' x='{x}' "
-                     f"y='{top + (i // 2) * chart_h}' />")
+        zones.append(
+            f"        <zone h='{chart_h}' id='{zid}' name='{esc(name)}' w='{width}' x='{x}' "
+            f"y='{top + (i // 2) * chart_h}' />"
+        )
     owner = (chart_sheets or kpi_sheets)[0]
     for i, dim_id in enumerate(filters):
         zid += 1
-        zones.append(f"        <zone h='9000' id='{zid}' mode='checkdropdown' name='{esc(owner)}' "
-                     f"param='[{DS}].{esc(model.dim_instance(dim_id))}' type-v2='filter' values='database' "
-                     f"w='{side}' x='{body}' y='{title_h + i * 9000}' />")
-    xml = f"""    <dashboard name='{esc(board['name'])}'>
+        zones.append(
+            f"        <zone h='9000' id='{zid}' mode='checkdropdown' name='{esc(owner)}' "
+            f"param='[{DS}].{esc(model.dim_instance(dim_id))}' type-v2='filter' values='database' "
+            f"w='{side}' x='{body}' y='{title_h + i * 9000}' />"
+        )
+    xml = f"""    <dashboard name='{esc(board["name"])}'>
       <style />
       <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
       <zones>
@@ -316,10 +364,32 @@ def build_twb(plan: dict, schema: dict, semantic: dict, currency: str = "₹") -
 
     layout = []
     for board in plan["dashboards"]:
-        kpi_names = [add({"name": f"KPI - {model.metrics[m]['label']}", "chart": "kpi", "metric": m,
-                          "dimension": None, "label": model.metrics[m]["label"]}) for m in board["kpis"]]
-        chart_names = [add({"name": c["title"], "chart": c["chart"], "metric": c["metric"], "dimension": c["dimension"],
-                            "sort": c.get("sort"), "top_n": c.get("top_n"), "label": c["title"]}) for c in board["charts"]]
+        kpi_names = [
+            add(
+                {
+                    "name": f"KPI - {model.metrics[m]['label']}",
+                    "chart": "kpi",
+                    "metric": m,
+                    "dimension": None,
+                    "label": model.metrics[m]["label"],
+                }
+            )
+            for m in board["kpis"]
+        ]
+        chart_names = [
+            add(
+                {
+                    "name": c["title"],
+                    "chart": c["chart"],
+                    "metric": c["metric"],
+                    "dimension": c["dimension"],
+                    "sort": c.get("sort"),
+                    "top_n": c.get("top_n"),
+                    "label": c["title"],
+                }
+            )
+            for c in board["charts"]
+        ]
         layout.append((board, kpi_names, chart_names))
 
     metric_ids = list(dict.fromkeys(sheets[n]["metric"] for n in order))
@@ -332,11 +402,15 @@ def build_twb(plan: dict, schema: dict, semantic: dict, currency: str = "₹") -
     sheet_windows = "\n".join(
         f"    <window class='worksheet' hidden='true' maximized='true' name='{esc(n)}'>"
         "<cards><edge name='left'><strip size='160'><card type='pages' /><card type='filters' />"
-        "<card type='marks' /></strip></edge></cards></window>" for n in order)
+        "<card type='marks' /></strip></edge></cards></window>"
+        for n in order
+    )
     board_windows = "\n".join(
         f"    <window class='dashboard'{' maximized=' + chr(39) + 'true' + chr(39) if i == 0 else ''} name='{esc(b['name'])}'>"
         f"<viewpoints>{''.join(f'<viewpoint name={chr(39)}{esc(n)}{chr(39)} />' for n in k + c)}</viewpoints>"
-        "<active id='-1' /></window>" for i, (b, k, c) in enumerate(layout))
+        "<active id='-1' /></window>"
+        for i, (b, k, c) in enumerate(layout)
+    )
 
     twb = f"""<?xml version='1.0' encoding='utf-8' ?>
 <workbook source-build='2024.2.0' source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
@@ -354,8 +428,10 @@ def build_twb(plan: dict, schema: dict, semantic: dict, currency: str = "₹") -
   </windows>
 </workbook>
 """
-    index = {"worksheets": [{"name": n, "chart": sheets[n]["chart"]} for n in order],
-             "dashboards": [b["name"] for b, _, _ in layout]}
+    index = {
+        "worksheets": [{"name": n, "chart": sheets[n]["chart"]} for n in order],
+        "dashboards": [b["name"] for b, _, _ in layout],
+    }
     return twb, index
 
 

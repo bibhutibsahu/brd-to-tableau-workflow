@@ -1,0 +1,75 @@
+name: Quality checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python and dependencies from uv.lock
+        # Python version comes from .python-version. --locked fails if uv.lock is stale.
+        run: uv sync --locked
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit hooks on all files
+        # Runs the exact hooks defined in .pre-commit-config.yaml on GitHub's
+        # infrastructure, so it applies no matter what any individual
+        # contributor has (or hasn't) set up locally.
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: Check the app modules import
+        run: uv run python -c "import config, modules.pipeline"
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan full git history with gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.0 \
+            git /repo --redact --verbose
+
+  large-file-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block large binaries outside git-lfs
+        run: |
+          git diff --name-only origin/main...HEAD | while read -r f; do
+            if [ -f "$f" ]; then
+              size=$(stat -c%s "$f")
+              if [ "$size" -gt 5000000 ]; then
+                echo "::error file=$f::File exceeds 5MB - use git-lfs instead of committing directly."
+                exit 1
+              fi
+            fi
+          done

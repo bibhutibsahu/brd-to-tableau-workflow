@@ -9,15 +9,49 @@ Upload BRD (PDF/DOCX) → Gemini extracts requirements → structured JSON → G
 → user review → approve / modify (by hand or in plain English) → generate Tableau workbook (.twbx / .twb)
 ```
 
-## Setup
+## Prerequisites
+
+- [uv](https://docs.astral.sh/uv/) (manages Python 3.12, the virtual environment and dependencies)
+- Git
+- A Gemini API key
+
+Install uv:
 
 ```bash
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -r requirements.txt
-.venv/bin/python scripts/generate_ecommerce_db.py   # builds data/ecommerce.db (star schema)
-.venv/bin/python scripts/make_sample_brd.py         # builds data/sample_brd.pdf + .docx
-.venv/bin/streamlit run app.py
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh      # or: brew install uv
 ```
+
+```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # or: winget install astral-sh.uv
+```
+
+## Setup
+
+The `uv` commands are the same on macOS, Linux and Windows. `uv run` uses the project's `.venv`, so you do
+not need to activate it.
+
+```bash
+uv sync                                          # installs Python 3.12 (from .python-version) + all dependencies
+uv run pre-commit install                        # mandatory: installs the pre-commit and pre-push hooks
+uv run python scripts/generate_ecommerce_db.py   # builds data/ecommerce.db (star schema)
+uv run python scripts/make_sample_brd.py         # builds data/sample_brd.pdf + .docx
+uv run streamlit run app.py
+```
+
+Copy the environment template:
+
+```bash
+cp .env.example .env               # macOS / Linux
+```
+
+```powershell
+Copy-Item .env.example .env        # Windows (PowerShell)
+```
+
+If you prefer to activate the environment yourself: `source .venv/bin/activate` (macOS / Linux) or
+`.venv\Scripts\Activate.ps1` (Windows PowerShell).
 
 ## Gemini API key
 
@@ -32,8 +66,36 @@ Choose the model in the sidebar, or set `GEMINI_MODEL` in `.env`.
 Command line (uses the key from `.env` / environment):
 
 ```bash
-.venv/bin/python -m modules.pipeline data/sample_brd.pdf --approve --model gemini-3.5-flash
+uv run python -m modules.pipeline data/sample_brd.pdf --approve --model gemini-3.5-flash
 ```
+
+## Configuration
+
+All settings are read in `config.py` from the environment or `.env` (see `.env.example`). Never commit `.env`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | – | Gemini API key. Optional if entered in the sidebar. |
+| `GOOGLE_API_KEY` | – | Fallback name for the Gemini key. |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Default model. |
+| `LLM_TEMPERATURE` | `0.1` | Sampling temperature for every LLM call. |
+| `DATABASE_PATH` | `data/ecommerce.db` | SQLite star schema the BRD is mapped onto. |
+| `MAX_BRD_CHARS` | `60000` | BRD text beyond this is cut before it is sent to the LLM. |
+| `PREVIEW_ROW_LIMIT` | `500` | Rows returned per preview query. |
+
+## Lint and format
+
+[Ruff](https://docs.astral.sh/ruff/) is the linter and formatter (config in `pyproject.toml`). The pre-commit
+hooks run it automatically. To run it by hand:
+
+```bash
+uv run ruff check --fix .
+uv run ruff format .
+uv run pre-commit run --all-files    # everything CI runs
+```
+
+There is no automated test suite yet. CI runs the pre-commit hooks, an import check, a gitleaks scan of the
+full history and a 5 MB file-size guard (`.github/workflows/ci.yml`).
 
 ## What Gemini does, and what code guarantees
 
@@ -89,4 +151,12 @@ prompts/                   extraction, visualization and insights prompts
 templates/dashboard_config.json   KPI catalog, chart rules, default filters
 scripts/                   database and sample BRD builders
 data/                      ecommerce.db, sample_brd.pdf / .docx
+.github/                   CI workflow and Dependabot config
+pyproject.toml, uv.lock    dependencies (uv) and ruff config
 ```
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: run `uv run pre-commit install` once per clone, and make
+every commit subject just the version (`vX.Y.Z`), with the details in the commit body and in
+[CHANGELOG.md](CHANGELOG.md).

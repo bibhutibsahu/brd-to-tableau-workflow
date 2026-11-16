@@ -1,0 +1,57 @@
+[project]
+name = "brd-to-tableau-agent"
+version = "0.2.0"
+description = "Gemini-powered app that turns a Business Requirements Document into reviewed Tableau dashboards over an ecommerce star schema."
+readme = "README.md"
+authors = [
+    { name = "Aashish Paruvada", email = "aashish.paruvada@adaglobal.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "altair>=5.4",
+    "fpdf2>=2.8",
+    "google-genai>=1.0",
+    "pandas>=2.2",
+    "pypdf>=5.0",
+    "python-docx>=1.1",
+    "python-dotenv>=1.0",
+    "streamlit>=1.40",
+]
+
+[tool.uv]
+# An app run from the repo root (app.py, modules/), not an installable package.
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv", "outputs"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",   # line length is handled by ruff-format; long string literals are left as written
+    "RUF001", # en dashes and ₹ in UI strings are intentional
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "modules"]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "ruff>=0.17.5",
+]

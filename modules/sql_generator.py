@@ -41,8 +41,10 @@ class SQLGenerator:
             if table == self.fact or table in added:
                 continue
             join = self.joins[table]
-            sql += (f"\nLEFT JOIN {_quote(table)} ON {self.alias}.{_quote(join['fact_column'])}"
-                    f" = {_quote(table)}.{_quote(join['dim_column'])}")
+            sql += (
+                f"\nLEFT JOIN {_quote(table)} ON {self.alias}.{_quote(join['fact_column'])}"
+                f" = {_quote(table)}.{_quote(join['dim_column'])}"
+            )
             added.add(table)
         return sql
 
@@ -71,8 +73,14 @@ class SQLGenerator:
         where, params = self._where_sql(filters)
         return f"SELECT\n  {select}\n{self._from_sql(list(filters or {}))}{where}", params
 
-    def chart_query(self, metric_id: str, dimension_id: str, filters: dict | None = None,
-                    sort: str = "desc", top_n: int | None = None) -> tuple:
+    def chart_query(
+        self,
+        metric_id: str,
+        dimension_id: str,
+        filters: dict | None = None,
+        sort: str = "desc",
+        top_n: int | None = None,
+    ) -> tuple:
         """Metric grouped by one dimension."""
         self._check([metric_id], dimension_id)
         dim = self.dimensions[dimension_id]
@@ -83,17 +91,28 @@ class SQLGenerator:
         else:
             order = f"{_quote(metric_id)} {'ASC' if sort == 'asc' else 'DESC'}"
         limit = int(top_n) if top_n else config.PREVIEW_ROW_LIMIT
-        sql = (f"SELECT\n  {column} AS {_quote(dim['column'])},\n  {self.metrics[metric_id]['sql']} AS {_quote(metric_id)}\n"
-               f"{self._from_sql([dimension_id] + list(filters or {}))}{where}\n"
-               f"GROUP BY {column}\nORDER BY {order}\nLIMIT {limit}")
+        sql = (
+            f"SELECT\n  {column} AS {_quote(dim['column'])},\n  {self.metrics[metric_id]['sql']} AS {_quote(metric_id)}\n"
+            f"{self._from_sql([dimension_id, *(filters or {})])}{where}\n"
+            f"GROUP BY {column}\nORDER BY {order}\nLIMIT {limit}"
+        )
         return sql, params
 
     def kpi_logic(self, metric_ids: list | None = None) -> list:
         """Business definition, SQL and Tableau formula for each metric (shown in the UI and docs)."""
         ids = metric_ids or list(self.metrics)
-        return [{"id": m, "label": self.metrics[m]["label"], "definition": self.metrics[m]["description"],
-                 "sql": self.metrics[m]["sql"], "tableau_formula": self.metrics[m]["tableau"],
-                 "format": self.metrics[m]["format"]} for m in ids if m in self.metrics]
+        return [
+            {
+                "id": m,
+                "label": self.metrics[m]["label"],
+                "definition": self.metrics[m]["description"],
+                "sql": self.metrics[m]["sql"],
+                "tableau_formula": self.metrics[m]["tableau"],
+                "format": self.metrics[m]["format"],
+            }
+            for m in ids
+            if m in self.metrics
+        ]
 
 
 def execute(sql: str, params: list | None = None, db_path=None) -> dict:
@@ -102,9 +121,19 @@ def execute(sql: str, params: list | None = None, db_path=None) -> dict:
     try:
         with connect(db_path) as conn:
             frame = pd.read_sql_query(sql, conn, params=params or [])
-        return {"data": frame, "rows": len(frame), "ms": round((time.perf_counter() - started) * 1000, 1), "error": None}
+        return {
+            "data": frame,
+            "rows": len(frame),
+            "ms": round((time.perf_counter() - started) * 1000, 1),
+            "error": None,
+        }
     except Exception as error:
-        return {"data": pd.DataFrame(), "rows": 0, "ms": round((time.perf_counter() - started) * 1000, 1), "error": str(error)}
+        return {
+            "data": pd.DataFrame(),
+            "rows": 0,
+            "ms": round((time.perf_counter() - started) * 1000, 1),
+            "error": str(error),
+        }
 
 
 def generate_queries(mapped: dict, generator: SQLGenerator) -> list:
@@ -114,14 +143,32 @@ def generate_queries(mapped: dict, generator: SQLGenerator) -> list:
         metric_ids = list(dict.fromkeys(k["metric_id"] for k in board["kpis"] if k["metric_id"]))
         if metric_ids:
             sql, params = generator.kpi_query(metric_ids)
-            queries.append({"dashboard": board["name"], "kind": "kpis", "name": "KPI cards",
-                            "metric_ids": metric_ids, "sql": sql, "params": params})
+            queries.append(
+                {
+                    "dashboard": board["name"],
+                    "kind": "kpis",
+                    "name": "KPI cards",
+                    "metric_ids": metric_ids,
+                    "sql": sql,
+                    "params": params,
+                }
+            )
         for visual in board["visuals"]:
             if visual["metric_id"] and visual["dimension_id"]:
-                sql, params = generator.chart_query(visual["metric_id"], visual["dimension_id"], top_n=visual.get("top_n"))
-                queries.append({"dashboard": board["name"], "kind": "visual", "name": visual["title"] or visual["metric"],
-                                "metric_ids": [visual["metric_id"]], "dimension_id": visual["dimension_id"],
-                                "sql": sql, "params": params})
+                sql, params = generator.chart_query(
+                    visual["metric_id"], visual["dimension_id"], top_n=visual.get("top_n")
+                )
+                queries.append(
+                    {
+                        "dashboard": board["name"],
+                        "kind": "visual",
+                        "name": visual["title"] or visual["metric"],
+                        "metric_ids": [visual["metric_id"]],
+                        "dimension_id": visual["dimension_id"],
+                        "sql": sql,
+                        "params": params,
+                    }
+                )
     return queries
 
 
