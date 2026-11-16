@@ -1,30 +1,19 @@
-"""BRD text -> structured requirements JSON.
-
-The LLM reads the BRD. Without an API key, a keyword fallback finds catalog KPIs named in
-the text and keeps the matching ecommerce dashboard templates.
-"""
-
-import re
+"""BRD text -> structured requirements JSON, extracted by Gemini."""
 
 import config
 from modules.llm_client import LLMClient, LLMError
-from modules.schema_mapper import load_dashboard_config, normalize
 
 
 def extract_requirements(brd_text: str, llm: LLMClient | None = None) -> dict:
+    """Gemini reads the BRD and returns the normalized requirements JSON."""
     llm = llm or LLMClient()
-    if llm.available:
-        prompt = (config.PROMPTS_DIR / "brd_extraction_prompt.txt").read_text(encoding="utf-8")
-        try:
-            raw = llm.generate_json(prompt.replace("{brd_text}", brd_text), purpose="brd_extraction")
-            result = normalize_requirements(raw)
-            result["extraction_method"] = f"llm:{llm.model}"
-            return result
-        except LLMError as error:
-            result = rule_based_extraction(brd_text)
-            result["assumptions"].insert(0, f"LLM extraction failed, used keyword fallback: {error}")
-            return result
-    return rule_based_extraction(brd_text)
+    if not llm.available:
+        raise LLMError("A Gemini API key is required to extract requirements.")
+    prompt = (config.PROMPTS_DIR / "brd_extraction_prompt.txt").read_text(encoding="utf-8")
+    raw = llm.generate_json(prompt.replace("{brd_text}", brd_text), purpose="brd_extraction")
+    result = normalize_requirements(raw)
+    result["extraction_method"] = f"llm:{llm.model}"
+    return result
 
 
 def normalize_requirements(raw: dict) -> dict:
@@ -78,58 +67,4 @@ def normalize_requirements(raw: dict) -> dict:
         "dashboards": dashboards,
         "assumptions": strings("assumptions"),
         "open_questions": strings("open_questions"),
-    }
-
-
-def rule_based_extraction(brd_text: str) -> dict:
-    """Keyword fallback: find catalog KPIs mentioned in the BRD and keep matching templates."""
-    settings = load_dashboard_config()
-    text = " " + normalize(brd_text) + " "
-    metric_by_id = {metric["id"]: metric for metric in settings["metrics"]}
-
-    mentioned = set()
-    for metric in settings["metrics"]:
-        for phrase in [metric["label"], metric["id"].replace("_", " ")] + metric["synonyms"]:
-            if f" {normalize(phrase)} " in text:
-                mentioned.add(metric["id"])
-                break
-
-    dashboards = []
-    for template in settings["fallback_dashboards"]:
-        ids = set(template["kpis"]) | {visual["metric"] for visual in template["visuals"]}
-        if mentioned & ids or normalize(template["name"]) in text:
-            dashboards.append({
-                "name": template["name"],
-                "purpose": template["purpose"],
-                "audience": "",
-                "kpis": [{"name": metric_by_id[m]["label"], "definition": "", "priority": "high" if m in mentioned else "medium"}
-                         for m in template["kpis"]],
-                "visuals": [{"title": v["title"], "metric": metric_by_id[v["metric"]]["label"],
-                             "dimension": v["dimension"], "chart_hint": "", "top_n": v.get("top_n")}
-                            for v in template["visuals"]],
-            })
-    if not dashboards:
-        template = settings["fallback_dashboards"][0]
-        dashboards.append({
-            "name": template["name"], "purpose": template["purpose"], "audience": "",
-            "kpis": [{"name": metric_by_id[m]["label"], "definition": "", "priority": "medium"} for m in template["kpis"]],
-            "visuals": [{"title": v["title"], "metric": metric_by_id[v["metric"]]["label"], "dimension": v["dimension"],
-                         "chart_hint": "", "top_n": v.get("top_n")} for v in template["visuals"]],
-        })
-
-    title = next((line.strip("# ").strip() for line in brd_text.splitlines() if line.strip()), "BRD Dashboards")
-    return {
-        "project_name": re.sub(r"\s+", " ", title)[:80],
-        "business_objective": "",
-        "domain": "ecommerce",
-        "stakeholders": [],
-        "time_grain": "month",
-        "global_filters": [],
-        "dashboards": dashboards,
-        "assumptions": [
-            "No LLM key configured: requirements were matched by keyword against the ecommerce KPI catalog "
-            f"({len(mentioned)} catalog KPIs found in the BRD). Set GEMINI_API_KEY for full extraction."
-        ],
-        "open_questions": [],
-        "extraction_method": "rule-based",
     }

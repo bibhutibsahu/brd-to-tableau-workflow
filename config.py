@@ -22,7 +22,7 @@ DATABASE_PATH = Path(os.getenv("DATABASE_PATH", DATA_DIR / "ecommerce.db"))
 # KPI catalog, chart rules and dashboard defaults.
 DASHBOARD_CONFIG_PATH = TEMPLATES_DIR / "dashboard_config.json"
 
-# LLM. Leave GEMINI_API_KEY empty to run the rule-based fallback (no API calls).
+# LLM. The key can also be entered in the app sidebar (kept in memory only).
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))

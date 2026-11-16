@@ -215,15 +215,37 @@ def match_dimension(name: str, semantic: dict, threshold: float = 0.45):
 
 # ---------------------------------------------------------------- requirement mapping
 
-def map_requirements(requirements: dict, semantic: dict, llm=None) -> dict:
-    """Return dashboards whose KPIs and visuals carry metric_id / dimension_id, plus an unmapped list."""
-    llm_map, method = {}, "fuzzy"
-    if llm is not None and llm.available:
-        try:
-            llm_map = _llm_mapping(requirements, semantic, llm)
-            method = f"llm:{llm.model}"
-        except Exception as error:  # fall back to fuzzy matching for every item
-            method = f"fuzzy (LLM mapping failed: {error})"
+_MISSING = object()
+
+
+def _resolve(llm_map: dict, key: str, slot: int, valid: set, fuzzy):
+    """Use the LLM's choice when it is a real id, keep an explicit LLM 'no match',
+    and fall back to fuzzy matching only to repair an invented id or a skipped item."""
+    entry = llm_map.get(key, _MISSING)
+    if entry is _MISSING:
+        found, score = fuzzy()
+        return found, score, "fuzzy (LLM skipped item)"
+    value = entry[slot]
+    confidence = entry[-1] if isinstance(entry[-1], float) else 0.7
+    if value in valid:
+        return value, confidence, "llm"
+    if value in (None, "", "null"):
+        return None, 0.0, "llm (no match)"
+    found, score = fuzzy()
+    return found, score, f"fuzzy repair (LLM returned unknown id '{value}')"
+
+
+def map_requirements(requirements: dict, semantic: dict, llm) -> dict:
+    """Gemini maps business names to metric / dimension ids; every id is checked against the schema.
+
+    Returns dashboards whose KPIs and visuals carry metric_id / dimension_id, plus an unmapped list.
+    """
+    if llm is None or not llm.available:
+        from modules.llm_client import LLMError
+
+        raise LLMError("A Gemini API key is required for schema mapping.")
+    llm_map = _llm_mapping(requirements, semantic, llm)
+    method = f"llm:{llm.model} (ids validated against schema)"
 
     metric_ids = {m["id"] for m in semantic["metrics"]}
     dim_ids = {d["id"] for d in semantic["dimensions"]}
@@ -231,14 +253,10 @@ def map_requirements(requirements: dict, semantic: dict, llm=None) -> dict:
     for b, board in enumerate(requirements["dashboards"]):
         kpis = []
         for k, kpi in enumerate(board["kpis"]):
-            key = f"d{b}k{k}"
-            metric_id, confidence = llm_map.get(key, (None, 0.0))[:2]
-            source = "llm"
-            if metric_id not in metric_ids:
-                metric_id, confidence = match_metric(kpi["name"] + " " + kpi.get("definition", ""), semantic)
-                if metric_id is None:
-                    metric_id, confidence = match_metric(kpi["name"], semantic)
-                source = "fuzzy"
+            def fuzzy_kpi(kpi=kpi):
+                found = match_metric(kpi["name"] + " " + kpi.get("definition", ""), semantic)
+                return found if found[0] else match_metric(kpi["name"], semantic)
+            metric_id, confidence, source = _resolve(llm_map, f"d{b}k{k}", 0, metric_ids, fuzzy_kpi)
             kpis.append({**kpi, "metric_id": metric_id, "confidence": confidence, "matched_by": source})
             if metric_id is None:
                 unmapped.append({"dashboard": board["name"], "type": "kpi", "name": kpi["name"],
@@ -247,18 +265,13 @@ def map_requirements(requirements: dict, semantic: dict, llm=None) -> dict:
         visuals = []
         for v, visual in enumerate(board["visuals"]):
             key = f"d{b}v{v}"
-            metric_id, dimension_id, confidence = llm_map.get(key, (None, None, 0.0))
-            source = "llm"
-            if metric_id not in metric_ids:
-                metric_id, confidence = match_metric(visual["metric"], semantic)
-                source = "fuzzy"
-            if dimension_id not in dim_ids:
-                dimension_id, dim_conf = match_dimension(visual["dimension"], semantic)
-                confidence = min(confidence, dim_conf) if dimension_id else confidence
-                source = "fuzzy"
-            entry = {**visual, "metric_id": metric_id, "dimension_id": dimension_id,
-                     "confidence": confidence, "matched_by": source}
-            visuals.append(entry)
+            metric_id, m_conf, m_src = _resolve(llm_map, key, 0, metric_ids,
+                                                lambda visual=visual: match_metric(visual["metric"], semantic))
+            dimension_id, d_conf, d_src = _resolve(llm_map, key, 1, dim_ids,
+                                                   lambda visual=visual: match_dimension(visual["dimension"], semantic))
+            source = m_src if m_src == d_src else f"metric: {m_src}; dimension: {d_src}"
+            visuals.append({**visual, "metric_id": metric_id, "dimension_id": dimension_id,
+                            "confidence": min(m_conf, d_conf), "matched_by": source})
             if metric_id is None or dimension_id is None:
                 missing = "metric" if metric_id is None else "dimension"
                 unmapped.append({"dashboard": board["name"], "type": "visual", "name": visual["title"] or visual["metric"],
@@ -267,9 +280,7 @@ def map_requirements(requirements: dict, semantic: dict, llm=None) -> dict:
 
     filters = []
     for f, name in enumerate(requirements.get("global_filters") or []):
-        dim_id = llm_map.get(f"f{f}", (None,))[0]
-        if dim_id not in dim_ids:
-            dim_id, _ = match_dimension(name, semantic)
+        dim_id, _, _ = _resolve(llm_map, f"f{f}", 0, dim_ids, lambda name=name: match_dimension(name, semantic))
         if dim_id and dim_id not in filters:
             filters.append(dim_id)
         elif not dim_id:
@@ -301,5 +312,5 @@ def _llm_mapping(requirements: dict, semantic: dict, llm) -> dict:
         result[str(item.get("key"))] = (item.get("metric_id"), item.get("dimension_id"), float(item.get("confidence") or 0.7))
     for index, item in enumerate(reply.get("filters") or []):
         key = str(item.get("key") or f"f{index}")
-        result[key] = (item.get("dimension_id"),)
+        result[key] = (item.get("dimension_id"), 0.7)
     return result

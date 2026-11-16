@@ -2,8 +2,8 @@
 
     streamlit run app.py
 
-Upload BRD -> extract requirements -> map schema -> SQL & KPI logic -> execute ->
-plan visuals -> preview -> review / modify -> approve -> generate Tableau workbook.
+Upload BRD -> Gemini extracts requirements -> map schema -> SQL & KPI logic -> execute ->
+Gemini plans visuals -> preview + AI insights -> review / modify -> approve -> Tableau workbook.
 """
 
 import copy
@@ -13,78 +13,103 @@ import pandas as pd
 import streamlit as st
 
 import config
-from modules.dashboard_generator import (altair_chart, build_preview, filter_values,
+from modules.dashboard_generator import (altair_chart, build_preview, filter_values, generate_insights,
                                          generate_tableau_workbook, star_schema_dot)
 from modules.llm_client import LLMClient, LLMError
-from modules.pipeline import run_until_preview
+from modules.pipeline import PipelineError, run_until_preview
 from modules.visualization_planner import revise_plan, validate_plan
 
 st.set_page_config(page_title="BRD to Tableau AI", page_icon="📊", layout="wide")
 
 CHART_LABELS = {"line": "Line", "bar": "Bar", "horizontal_bar": "Horizontal bar", "pie": "Pie", "table": "Table"}
+MODELS = ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-flash", "gemini-2.5-pro"]
+
+ss = st.session_state
 
 
-@st.cache_resource
-def get_llm() -> LLMClient:
-    return LLMClient()
-
-
-def ss():
-    return st.session_state
+def current_llm() -> LLMClient | None:
+    return ss.get("llm")
 
 
 def set_plan(plan: dict):
-    """Store a new plan, rebuild the preview, and clear any earlier approval."""
-    state = ss()["state"]
+    """Store a new plan, rebuild the preview, clear stale insights and any earlier approval."""
+    state = ss["state"]
     state["plan"] = validate_plan(plan, state["semantic"])
-    state["preview"] = build_preview(state["plan"], state["schema"], state["semantic"], ss().get("filters"))
-    ss()["approved"] = False
-    ss()["export"] = None
+    state["preview"] = build_preview(state["plan"], state["schema"], state["semantic"], ss.get("filters"))
+    state["insights"] = {}
+    ss["approved"], ss["export"] = False, None
 
 
-# ------------------------------------------------------------------ sidebar
+# ------------------------------------------------------------------ sidebar: API key + run
 
-llm = get_llm()
 with st.sidebar:
     st.title("📊 BRD → Tableau AI")
-    if llm.available:
-        st.success(f"LLM: {llm.model}")
+
+    st.subheader("1. Connect Gemini")
+    api_key = st.text_input("Gemini API key", value=config.GEMINI_API_KEY, type="password",
+                            help="Get one at https://aistudio.google.com/apikey. Kept in this browser session's memory "
+                                 "only; never saved to disk.")
+    default_model = config.GEMINI_MODEL if config.GEMINI_MODEL in MODELS else MODELS[0]
+    model_choice = st.selectbox("Model", MODELS + ["Custom…"], index=(MODELS + ["Custom…"]).index(default_model))
+    model = st.text_input("Custom model id", config.GEMINI_MODEL) if model_choice == "Custom…" else model_choice
+
+    if st.button("Connect", width="stretch", disabled=not api_key.strip()):
+        candidate = LLMClient(api_key=api_key, model=model)
+        with st.spinner(f"Testing {model}…"):
+            try:
+                info = candidate.ping()
+                ss["llm"] = candidate
+                st.success(f"Connected to {info['model']} ({info['latency_ms']} ms)")
+            except LLMError as error:
+                ss.pop("llm", None)
+                st.error(str(error))
+
+    llm = current_llm()
+    if llm and (llm.api_key != api_key.strip() or llm.model != model):
+        ss.pop("llm", None)
+        llm = None
+    if llm:
+        st.caption(f"🟢 {llm.model} · {len(llm.calls)} calls · {llm.total_tokens:,} tokens")
     else:
-        st.warning("No GEMINI_API_KEY: rule-based mode. Requirements are matched to the KPI catalog by keyword.")
+        st.caption("🔴 Not connected")
+
+    st.subheader("2. BRD")
     upload = st.file_uploader("Upload BRD", type=["pdf", "docx", "txt", "md"])
     sample = config.DATA_DIR / "sample_brd.pdf"
-    use_sample = st.checkbox("Use sample ecommerce BRD", value=upload is None and sample.exists())
+    use_sample = upload is None and sample.exists() and st.checkbox("Use the included ecommerce BRD", value=True)
     st.caption(f"Database: `{config.DATABASE_PATH.name}`")
+
     run = st.button("▶ Run pipeline", type="primary", width="stretch",
-                    disabled=upload is None and not use_sample)
+                    disabled=llm is None or (upload is None and not use_sample))
+    if llm is None:
+        st.caption("Connect Gemini to run.")
 
 if run:
-    source, name = (upload.getvalue(), upload.name) if upload is not None and not use_sample else (sample, sample.name)
+    source, name = (upload.getvalue(), upload.name) if upload is not None else (sample, sample.name)
     with st.status("Running pipeline…", expanded=True) as status:
         try:
-            ss()["state"] = run_until_preview(source, name, llm, log=st.write)
-            ss()["approved"], ss()["export"], ss()["filters"] = False, None, {}
+            ss["state"] = run_until_preview(source, name, llm, log=st.write)
+            ss["approved"], ss["export"], ss["filters"] = False, None, {}
             status.update(label="Pipeline complete. Review the preview, then approve.", state="complete")
-        except FileNotFoundError as error:
-            status.update(label="Database missing", state="error")
-            st.error(str(error))
-        except Exception as error:
+        except PipelineError as error:
+            status.update(label=f"Failed at: {error.step}", state="error")
+            st.error(str(error.cause))
+        except (LLMError, FileNotFoundError) as error:
             status.update(label="Pipeline failed", state="error")
-            st.exception(error)
+            st.error(str(error))
 
-if "state" not in ss():
+if "state" not in ss:
     st.header("BRD → Tableau dashboards")
     st.markdown(
-        "Upload a Business Requirements Document (PDF/DOCX), or tick **Use sample ecommerce BRD**, then **Run pipeline**.\n\n"
-        "1. **Extract** KPIs, visuals and filters from the BRD (LLM)\n"
-        "2. **Map** them to the ecommerce star schema\n"
-        "3. **Generate and run SQL** for every KPI and chart\n"
-        "4. **Plan** the chart types and layout\n"
-        "5. **Preview**, modify, and approve\n"
-        "6. **Generate** a Tableau workbook (.twbx)")
+        "1. **Connect Gemini** in the sidebar with your API key\n"
+        "2. **Upload a BRD** (PDF / DOCX / TXT), or use the included ecommerce BRD\n"
+        "3. **Run pipeline**: Gemini extracts the requirements, maps them to the star schema, and plans the "
+        "dashboards; SQL computes every KPI\n"
+        "4. **Review** the preview and AI insights, modify charts by hand or in plain English, then **approve**\n"
+        "5. **Download** the Tableau workbook (.twbx)")
     st.stop()
 
-state = ss()["state"]
+state = ss["state"]
 req, mapped, plan = state["requirements"], state["mapped"], state["plan"]
 
 st.header(req["project_name"])
@@ -94,14 +119,15 @@ cols[1].metric("Charts", sum(len(b["charts"]) for b in plan["dashboards"]))
 cols[2].metric("KPIs", len({k for b in plan["dashboards"] for k in b["kpis"]}))
 cols[3].metric("SQL queries", len(state["results"]), f"{sum(1 for r in state['results'] if r['error'])} failed",
                delta_color="inverse")
-cols[4].metric("Unmapped", len(mapped["unmapped"]))
+cols[4].metric("Unmapped requirements", len(mapped["unmapped"]))
 
-tabs = st.tabs(["1 · Requirements", "2 · Schema mapping", "3 · SQL & KPI logic", "4 · Preview & review", "5 · Tableau export"])
+tabs = st.tabs(["1 · Requirements", "2 · Schema mapping", "3 · SQL & KPI logic", "4 · Preview & review",
+                "5 · Tableau export", "LLM trace"])
 
 # ------------------------------------------------------------------ 1 requirements
 with tabs[0]:
-    st.caption(f"Source: {state['brd']['source']} · {state['brd']['char_count']:,} characters · "
-               f"extracted by {req.get('extraction_method')}")
+    st.caption(f"Source: {state['brd']['source']} · {state['brd']['char_count']:,} characters"
+               f"{' (truncated)' if state['brd']['truncated'] else ''} · extracted by {req.get('extraction_method')}")
     if req["business_objective"]:
         st.info(req["business_objective"])
     left, right = st.columns(2)
@@ -111,6 +137,8 @@ with tabs[0]:
     for board in req["dashboards"]:
         with st.expander(f"{board['name']} — {len(board['kpis'])} KPIs, {len(board['visuals'])} visuals"):
             st.write(board["purpose"])
+            if board.get("audience"):
+                st.caption(f"Audience: {board['audience']}")
             st.dataframe(pd.DataFrame(board["kpis"]), hide_index=True, width="stretch")
             st.dataframe(pd.DataFrame(board["visuals"]), hide_index=True, width="stretch")
     for title, items in (("Assumptions", req["assumptions"]), ("Open questions", req["open_questions"])):
@@ -123,14 +151,14 @@ with tabs[0]:
 
 # ------------------------------------------------------------------ 2 schema mapping
 with tabs[1]:
-    left, right = st.columns([1, 1])
+    left, right = st.columns(2)
     with left:
         st.subheader("Star schema")
         st.graphviz_chart(star_schema_dot(state["schema"]))
     with right:
         st.subheader("Semantic layer")
         st.write(f"{len(state['semantic']['metrics'])} metrics, {len(state['semantic']['dimensions'])} dimensions. "
-                 f"Mapping method: `{mapped['method']}`")
+                 f"Mapping: `{mapped['method']}`")
         st.dataframe(pd.DataFrame(state["semantic"]["dimensions"])[["id", "label", "distinct_count", "temporal"]],
                      hide_index=True, width="stretch", height=260)
     rows = []
@@ -170,22 +198,38 @@ with tabs[3]:
     dim_label = {d["id"]: f"{d['label']} ({d['table']})" for d in semantic["dimensions"]}
 
     if plan["filters"]:
-        filter_cols = st.columns(len(plan["filters"]))
         chosen = {}
-        for col, dim_id in zip(filter_cols, plan["filters"]):
+        for col, dim_id in zip(st.columns(len(plan["filters"])), plan["filters"]):
             chosen[dim_id] = col.multiselect(dim_label[dim_id], filter_values(dim_id, semantic), key=f"flt_{dim_id}")
         chosen = {k: v for k, v in chosen.items() if v}
-        if chosen != ss().get("filters", {}):
-            ss()["filters"] = chosen
+        if chosen != ss.get("filters", {}):
+            ss["filters"] = chosen
             state["preview"] = build_preview(plan, state["schema"], semantic, chosen)
+            state["insights"] = {}
 
+    top_left, top_right = st.columns([3, 1])
     for warning in plan.get("warnings", []):
-        st.caption(f"⚠️ {warning}")
+        top_left.caption(f"⚠️ {warning}")
+    if top_right.button("✨ Refresh AI insights", disabled=llm is None, width="stretch"):
+        with st.spinner("Gemini is reading the numbers…"):
+            try:
+                state["insights"] = generate_insights(state["preview"], semantic, llm, req["business_objective"],
+                                                      ss.get("filters"))
+            except LLMError as error:
+                st.error(str(error))
 
     for b_index, board in enumerate(state["preview"]):
         st.markdown(f"### {board['name']}")
         if board["purpose"]:
             st.caption(board["purpose"])
+        insight = state.get("insights", {}).get(board["name"])
+        if insight:
+            with st.container(border=True):
+                st.markdown(f"**✨ {insight['headline']}**")
+                for line in insight["insights"]:
+                    st.markdown(f"- {line}")
+                if insight["recommendations"]:
+                    st.markdown("**Recommended actions:** " + " · ".join(insight["recommendations"]))
         if board["kpis"]:
             for col, kpi in zip(st.columns(len(board["kpis"])), board["kpis"]):
                 col.metric(kpi["label"], kpi["display"])
@@ -193,6 +237,8 @@ with tabs[3]:
         for c_index, chart in enumerate(board["charts"]):
             with chart_cols[c_index % 2]:
                 st.markdown(f"**{chart['title']}** · _{CHART_LABELS[chart['chart']]}_")
+                if chart.get("rationale"):
+                    st.caption(chart["rationale"])
                 if chart["error"]:
                     st.error(chart["error"])
                 elif chart["chart"] == "table":
@@ -224,31 +270,32 @@ with tabs[3]:
         st.divider()
 
     st.subheader("Review")
-    instruction = st.text_area("Ask for changes in plain English",
-                               placeholder="e.g. Make Net Revenue by Region a horizontal bar and add a chart of "
-                                           "Return Rate by Brand to Product Performance")
+    instruction = st.text_area("Ask Gemini for changes in plain English",
+                               placeholder="e.g. Make Net Revenue by Region a horizontal bar, and add Return Rate by "
+                                           "Brand to Product Performance")
     left, right = st.columns(2)
-    if left.button("✨ Apply with AI", disabled=not instruction.strip()):
-        try:
-            set_plan(revise_plan(plan, instruction, semantic, llm))
-            st.rerun()
-        except LLMError as error:
-            st.error(str(error))
+    if left.button("✨ Apply with Gemini", disabled=llm is None or not instruction.strip()):
+        with st.spinner("Gemini is revising the plan…"):
+            try:
+                set_plan(revise_plan(plan, instruction, semantic, llm))
+                st.rerun()
+            except LLMError as error:
+                st.error(str(error))
     if right.button("✅ Approve dashboards", type="primary"):
-        ss()["approved"] = True
+        ss["approved"] = True
         st.success("Approved. Open the Tableau export tab.")
 
 # ------------------------------------------------------------------ 5 export
 with tabs[4]:
-    if not ss().get("approved"):
+    if not ss.get("approved"):
         st.info("Approve the dashboards in the Preview & review tab first.")
     else:
         if st.button("📦 Generate Tableau workbook", type="primary"):
             try:
-                ss()["export"] = generate_tableau_workbook(plan, state["schema"], state["semantic"])
+                ss["export"] = generate_tableau_workbook(plan, state["schema"], state["semantic"])
             except Exception as error:
                 st.exception(error)
-        export = ss().get("export")
+        export = ss.get("export")
         if export:
             st.success(f"Workbook written: {len(export['dashboards'])} dashboards, "
                        f"{len(export['worksheets'])} worksheets. XML validation passed.")
@@ -261,3 +308,22 @@ with tabs[4]:
             st.dataframe(pd.DataFrame(export["worksheets"]), hide_index=True, width="stretch")
             with st.expander("Approved plan"):
                 st.json(plan)
+
+# ------------------------------------------------------------------ LLM trace
+with tabs[5]:
+    calls = llm.calls if llm else []
+    if not calls:
+        st.info("No Gemini calls in this session yet.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Calls", len(calls))
+        c2.metric("Total tokens", f"{llm.total_tokens:,}")
+        c3.metric("Total latency", f"{sum(c['latency_ms'] for c in calls) / 1000:.1f} s")
+        table = pd.DataFrame(calls)[["purpose", "model", "ok", "latency_ms", "prompt_tokens", "output_tokens", "error"]]
+        st.dataframe(table, hide_index=True, width="stretch")
+        for i, call in enumerate(calls, start=1):
+            with st.expander(f"{i}. {call['purpose']} — {'ok' if call['ok'] else 'failed'}, {call['latency_ms']} ms"):
+                st.markdown("**Prompt**")
+                st.code(call["prompt"], language="text")
+                st.markdown("**Response**")
+                st.code(call["response"] or call.get("error") or "", language="json")

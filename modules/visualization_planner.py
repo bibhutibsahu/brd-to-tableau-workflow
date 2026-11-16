@@ -6,11 +6,10 @@ Plan shape (the contract between preview, review and Tableau export):
   "filters": ["table.column", ...],
   "dashboards": [{"name", "purpose", "kpis": [metric ids],
                   "charts": [{"id", "title", "chart", "metric", "dimension", "sort", "top_n", "rationale"}]}],
-  "warnings": [...], "planned_by": "rules | llm:<model>"
+  "warnings": [...], "planned_by": "llm:<model>"
 }
 """
 
-import copy
 import json
 
 import config
@@ -55,34 +54,15 @@ def choose_chart(metric: dict, dimension: dict, hint: str = "", top_n: int | Non
     return "bar", "desc", None, "Few categories: bars compare values side by side."
 
 
-def plan_with_rules(mapped: dict, semantic: dict, title: str) -> dict:
-    metrics = {m["id"]: m for m in semantic["metrics"]}
-    dims = {d["id"]: d for d in semantic["dimensions"]}
-    dashboards = []
-    for board in mapped["dashboards"]:
-        kpis = list(dict.fromkeys(k["metric_id"] for k in board["kpis"] if k["metric_id"]))[:6]
-        charts = []
-        for visual in board["visuals"]:
-            if not (visual["metric_id"] and visual["dimension_id"]):
-                continue
-            chart, sort, top_n, why = choose_chart(metrics[visual["metric_id"]], dims[visual["dimension_id"]],
-                                                   visual.get("chart_hint", ""), visual.get("top_n"))
-            charts.append({"title": visual["title"] or f"{metrics[visual['metric_id']]['label']} by {dims[visual['dimension_id']]['label']}",
-                           "chart": chart, "metric": visual["metric_id"], "dimension": visual["dimension_id"],
-                           "sort": sort, "top_n": top_n, "rationale": why})
-        if kpis or charts:
-            dashboards.append({"name": board["name"], "purpose": board.get("purpose", ""), "kpis": kpis, "charts": charts[:6]})
-
-    settings = load_dashboard_config()
-    filters = mapped.get("filters") or [f for f in settings["default_filters"] if f in dims]
-    return validate_plan({"title": title, "filters": filters, "dashboards": dashboards, "planned_by": "rules"}, semantic)
-
-
 def plan_visualizations(mapped: dict, semantic: dict, title: str, results: list | None = None, llm=None) -> dict:
-    """Rules give a valid baseline; the LLM, when available, refines chart choices and layout."""
-    baseline = plan_with_rules(mapped, semantic, title)
+    """Gemini designs the dashboards from the mapped requirements and the data profile.
+
+    The result always passes validate_plan (unknown ids dropped, chart types checked, titles unique).
+    """
     if llm is None or not llm.available:
-        return baseline
+        from modules.llm_client import LLMError
+
+        raise LLMError("A Gemini API key is required for visualization planning .")
     settings = load_dashboard_config()
     rules = _rules(settings)
     profile = [{"dashboard": r["dashboard"], "visual": r["name"], "dimension": r.get("dimension_id"),
@@ -97,17 +77,15 @@ def plan_visualizations(mapped: dict, semantic: dict, title: str, results: list 
         share_max=rules["share_max_categories"], hbar_min=rules["horizontal_bar_min_categories"],
         requirements=json.dumps(_compact(mapped), indent=1), profile=json.dumps(profile, indent=1),
     )
-    try:
-        plan = llm.generate_json(prompt, purpose="visualization_planning")
-        plan.setdefault("title", title)
-        plan["planned_by"] = f"llm:{llm.model}"
-        checked = validate_plan(plan, semantic)
-        if not checked["dashboards"]:
-            raise ValueError("LLM plan had no valid dashboards")
-        return checked
-    except Exception as error:
-        baseline["warnings"].insert(0, f"LLM planning failed, used rule-based plan: {error}")
-        return baseline
+    plan = llm.generate_json(prompt, purpose="visualization_planning")
+    plan.setdefault("title", title)
+    plan["planned_by"] = f"llm:{llm.model}"
+    checked = validate_plan(plan, semantic)
+    if not checked["dashboards"]:
+        from modules.llm_client import LLMError
+
+        raise LLMError("Gemini's dashboard plan used no valid metrics or dimensions: " + "; ".join(checked["warnings"][:5]))
+    return checked
 
 
 def _compact(mapped: dict) -> list:
@@ -184,10 +162,9 @@ def validate_plan(plan: dict, semantic: dict) -> dict:
 def revise_plan(plan: dict, instruction: str, semantic: dict, llm=None) -> dict:
     """Apply a natural-language change request ("make revenue by region a pie", "add a returns dashboard")."""
     if llm is None or not llm.available:
-        updated = copy.deepcopy(plan)
-        updated.setdefault("warnings", []).append(
-            "Natural-language edits need GEMINI_API_KEY. Use the chart editors to change the plan.")
-        return updated
+        from modules.llm_client import LLMError
+
+        raise LLMError("Plain-English edits need a Gemini API key.")
     settings = load_dashboard_config()
     prompt = REVISION_PROMPT.format(
         metrics=", ".join(m["id"] for m in semantic["metrics"]),

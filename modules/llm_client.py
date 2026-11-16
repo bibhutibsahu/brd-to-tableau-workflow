@@ -1,12 +1,16 @@
-"""Gemini wrapper that always returns parsed JSON.
+"""Gemini wrapper that returns parsed JSON and records every call for the LLM trace.
 
-When no API key is configured, `available` is False and callers use their rule-based fallback.
+The API key comes from the app (user input) or from GEMINI_API_KEY in the environment / .env.
+It is held in memory only and never written to disk or logs.
 """
 
 import json
 import re
+import time
 
 import config
+
+MAX_TRACE_CHARS = 20000  # prompt / response text kept per call for the trace view
 
 
 class LLMError(RuntimeError):
@@ -15,15 +19,19 @@ class LLMError(RuntimeError):
 
 class LLMClient:
     def __init__(self, api_key: str | None = None, model: str | None = None, temperature: float | None = None):
-        self.api_key = config.GEMINI_API_KEY if api_key is None else api_key
-        self.model = model or config.GEMINI_MODEL
+        self.api_key = (config.GEMINI_API_KEY if api_key is None else api_key).strip()
+        self.model = (model or config.GEMINI_MODEL).strip()
         self.temperature = config.LLM_TEMPERATURE if temperature is None else temperature
         self._client = None
-        self.calls = []  # (purpose, prompt chars, response chars) for the audit trail
+        self.calls = []  # one entry per request: purpose, latency, tokens, prompt, response
 
     @property
     def available(self) -> bool:
         return bool(self.api_key)
+
+    @property
+    def total_tokens(self) -> int:
+        return sum((c.get("prompt_tokens") or 0) + (c.get("output_tokens") or 0) for c in self.calls)
 
     def _get_client(self):
         if self._client is None:
@@ -32,37 +40,72 @@ class LLMClient:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
+    def ping(self) -> dict:
+        """Check that the key and model work with one tiny request."""
+        reply = self.generate_json('Reply with exactly this JSON: {"ok": true}', purpose="connection_test")
+        if reply.get("ok") is not True:
+            raise LLMError(f"Unexpected reply from {self.model}: {reply}")
+        return {"model": self.model, "latency_ms": self.calls[-1]["latency_ms"]}
+
     def generate_json(self, prompt: str, purpose: str = "", system: str | None = None) -> dict:
-        """Send the prompt and return the JSON object in the reply. Retries once on bad JSON."""
+        """Send the prompt and return the JSON object in the reply. Retries once on invalid JSON."""
         if not self.available:
-            raise LLMError("No GEMINI_API_KEY configured")
+            raise LLMError("No Gemini API key. Enter it in the sidebar or set GEMINI_API_KEY in .env.")
         from google.genai import types
 
         settings = types.GenerateContentConfig(
-            system_instruction=system or "You are a precise assistant that replies with valid JSON only.",
+            system_instruction=system or "You are a precise analytics assistant. Reply with valid JSON only.",
             response_mime_type="application/json",
             temperature=self.temperature,
         )
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
         last_error = None
-        for _ in range(2):
+        for attempt in range(2):
+            started = time.perf_counter()
             try:
-                response = self._get_client().models.generate_content(
-                    model=self.model, contents=contents, config=settings
-                )
-            except Exception as error:  # network, quota, auth
-                raise LLMError(f"Gemini call failed: {error}") from error
+                response = self._get_client().models.generate_content(model=self.model, contents=contents, config=settings)
+            except Exception as error:
+                self._record(purpose, prompt, "", started, None, ok=False, error=str(error))
+                raise LLMError(_friendly_error(error, self.model)) from error
             text = response.text or ""
-            self.calls.append({"purpose": purpose, "prompt_chars": len(prompt), "response_chars": len(text)})
             try:
-                return parse_json(text)
+                value = parse_json(text)
+                self._record(purpose, prompt, text, started, response, ok=True)
+                return value
             except ValueError as error:
                 last_error = error
+                self._record(purpose, prompt, text, started, response, ok=False, error=f"invalid JSON: {error}")
                 contents += [
                     {"role": "model", "parts": [{"text": text}]},
                     {"role": "user", "parts": [{"text": f"That was not valid JSON ({error}). Reply with the corrected JSON object only."}]},
                 ]
-        raise LLMError(f"Gemini did not return valid JSON: {last_error}")
+        raise LLMError(f"{self.model} did not return valid JSON for {purpose or 'the request'}: {last_error}")
+
+    def _record(self, purpose, prompt, text, started, response, ok, error=None):
+        usage = getattr(response, "usage_metadata", None)
+        self.calls.append({
+            "purpose": purpose,
+            "model": self.model,
+            "ok": ok,
+            "error": error,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "prompt_tokens": getattr(usage, "prompt_token_count", None),
+            "output_tokens": getattr(usage, "candidates_token_count", None),
+            "prompt": prompt[:MAX_TRACE_CHARS],
+            "response": text[:MAX_TRACE_CHARS],
+        })
+
+
+def _friendly_error(error: Exception, model: str) -> str:
+    message = str(error)
+    lowered = message.lower()
+    if "api key not valid" in lowered or "api_key_invalid" in lowered or "permission_denied" in lowered or " 401" in lowered or " 403" in lowered:
+        return "Gemini rejected the API key. Check it at https://aistudio.google.com/apikey"
+    if "not found" in lowered and "model" in lowered or " 404" in lowered:
+        return f"Model '{model}' was not found for this key. Pick another model in the sidebar."
+    if "resource_exhausted" in lowered or "quota" in lowered or " 429" in lowered:
+        return "Gemini quota or rate limit reached. Wait a minute or use a key with more quota."
+    return f"Gemini call failed: {message[:500]}"
 
 
 def parse_json(text: str) -> dict:

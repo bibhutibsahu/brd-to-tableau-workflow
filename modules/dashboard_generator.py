@@ -80,6 +80,47 @@ def altair_chart(chart: dict, semantic: dict):
     return base.mark_bar().encode(x=alt.X(x_field, title=dim["label"], sort=sort), y=measure, tooltip=tooltip)
 
 
+def generate_insights(preview: list, semantic: dict, llm, objective: str = "", filters: dict | None = None) -> dict:
+    """Gemini writes a headline, insights and recommendations per dashboard from the preview numbers only.
+
+    Returns {dashboard name: {"headline", "insights", "recommendations"}}.
+    """
+    metrics = {m["id"]: m for m in semantic["metrics"]}
+    dims = {d["id"]: d for d in semantic["dimensions"]}
+    payload = []
+    for board in preview:
+        charts = []
+        for chart in board["charts"]:
+            if chart["error"] or chart["data"].empty:
+                continue
+            fmt = metrics[chart["metric"]]["format"]
+            column = dims[chart["dimension"]]["column"]
+            rows = [{dims[chart["dimension"]]["label"]: str(row[column]),
+                     metrics[chart["metric"]]["label"]: format_value(row[chart["metric"]], fmt)}
+                    for _, row in chart["data"].head(15).iterrows()]
+            charts.append({"title": chart["title"], "rows": rows,
+                           "rows_total": chart["rows"], "rows_shown": len(rows)})
+        payload.append({"name": board["name"], "purpose": board.get("purpose", ""),
+                        "kpis": {k["label"]: k["display"] for k in board["kpis"]}, "charts": charts})
+
+    prompt = (config.PROMPTS_DIR / "insights_prompt.txt").read_text(encoding="utf-8").format(
+        objective=objective or "(not stated)",
+        filters=json.dumps(filters or {}) if filters else "none (all data)",
+        data=json.dumps(payload, indent=1, ensure_ascii=False),
+    )
+    reply = llm.generate_json(prompt, purpose="insights")
+    names = {board["name"] for board in preview}
+    insights = {}
+    for item in reply.get("dashboards") or []:
+        if isinstance(item, dict) and item.get("name") in names:
+            insights[item["name"]] = {
+                "headline": str(item.get("headline") or ""),
+                "insights": [str(x) for x in item.get("insights") or []][:4],
+                "recommendations": [str(x) for x in item.get("recommendations") or []][:2],
+            }
+    return insights
+
+
 def filter_values(dimension_id: str, semantic: dict) -> list:
     """Distinct values of a dimension, for preview filter widgets."""
     dim = next(d for d in semantic["dimensions"] if d["id"] == dimension_id)
