@@ -41,6 +41,7 @@ def normalize_requirements(raw: dict) -> dict:
             top_n = visual.get("top_n")
             visuals.append(
                 {
+                    "ref": str(visual.get("ref") or "").strip(),  # BRD requirement id, e.g. FR-1.1
                     "title": str(visual.get("title") or "").strip(),
                     "metric": str(visual.get("metric")).strip(),
                     "dimension": str(visual.get("dimension") or "").strip(),

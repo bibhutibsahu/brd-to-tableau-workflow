@@ -20,6 +20,7 @@
       ],
       "sql": "SUM(f.net_revenue)",
       "tableau": "SUM([net_revenue])",
+      "dax": "SUM('fact_sales'[net_revenue])",
       "columns": [
         "net_revenue"
       ]
@@ -36,6 +37,7 @@
       ],
       "sql": "SUM(f.gross_sales)",
       "tableau": "SUM([gross_sales])",
+      "dax": "SUM('fact_sales'[gross_sales])",
       "columns": [
         "gross_sales"
       ]
@@ -54,6 +56,7 @@
       ],
       "sql": "COUNT(DISTINCT f.order_id)",
       "tableau": "COUNTD([order_id])",
+      "dax": "DISTINCTCOUNT('fact_sales'[order_id])",
       "columns": [
         "order_id"
       ]
@@ -71,6 +74,7 @@
       ],
       "sql": "SUM(f.quantity)",
       "tableau": "SUM([quantity])",
+      "dax": "SUM('fact_sales'[quantity])",
       "columns": [
         "quantity"
       ]
@@ -89,6 +93,7 @@
       ],
       "sql": "COUNT(DISTINCT f.customer_key)",
       "tableau": "COUNTD([customer_key])",
+      "dax": "DISTINCTCOUNT('fact_sales'[customer_key])",
       "columns": [
         "customer_key"
       ]
@@ -106,6 +111,7 @@
       ],
       "sql": "COUNT(DISTINCT CASE WHEN f.is_first_order = 1 THEN f.customer_key END)",
       "tableau": "COUNTD(IF [is_first_order] = 1 THEN [customer_key] END)",
+      "dax": "CALCULATE(DISTINCTCOUNT('fact_sales'[customer_key]), 'fact_sales'[is_first_order] = 1)",
       "columns": [
         "is_first_order",
         "customer_key"
@@ -125,6 +131,7 @@
       ],
       "sql": "SUM(f.net_revenue) * 1.0 / NULLIF(COUNT(DISTINCT f.order_id), 0)",
       "tableau": "SUM([net_revenue]) / COUNTD([order_id])",
+      "dax": "DIVIDE(SUM('fact_sales'[net_revenue]), DISTINCTCOUNT('fact_sales'[order_id]))",
       "columns": [
         "net_revenue",
         "order_id"
@@ -143,6 +150,7 @@
       ],
       "sql": "SUM(f.quantity) * 1.0 / NULLIF(COUNT(DISTINCT f.order_id), 0)",
       "tableau": "SUM([quantity]) / COUNTD([order_id])",
+      "dax": "DIVIDE(SUM('fact_sales'[quantity]), DISTINCTCOUNT('fact_sales'[order_id]))",
       "columns": [
         "quantity",
         "order_id"
@@ -161,6 +169,7 @@
       ],
       "sql": "SUM(f.net_revenue) * 1.0 / NULLIF(COUNT(DISTINCT f.customer_key), 0)",
       "tableau": "SUM([net_revenue]) / COUNTD([customer_key])",
+      "dax": "DIVIDE(SUM('fact_sales'[net_revenue]), DISTINCTCOUNT('fact_sales'[customer_key]))",
       "columns": [
         "net_revenue",
         "customer_key"
@@ -180,6 +189,7 @@
       ],
       "sql": "COUNT(DISTINCT CASE WHEN f.is_first_order = 0 THEN f.order_id END) * 1.0 / NULLIF(COUNT(DISTINCT f.order_id), 0)",
       "tableau": "COUNTD(IF [is_first_order] = 0 THEN [order_id] END) / COUNTD([order_id])",
+      "dax": "DIVIDE(CALCULATE(DISTINCTCOUNT('fact_sales'[order_id]), 'fact_sales'[is_first_order] = 0), DISTINCTCOUNT('fact_sales'[order_id]))",
       "columns": [
         "is_first_order",
         "order_id"
@@ -198,6 +208,7 @@
       ],
       "sql": "SUM(f.gross_profit)",
       "tableau": "SUM([gross_profit])",
+      "dax": "SUM('fact_sales'[gross_profit])",
       "columns": [
         "gross_profit"
       ]
@@ -216,6 +227,7 @@
       ],
       "sql": "SUM(f.gross_profit) * 1.0 / NULLIF(SUM(f.net_revenue), 0)",
       "tableau": "SUM([gross_profit]) / SUM([net_revenue])",
+      "dax": "DIVIDE(SUM('fact_sales'[gross_profit]), SUM('fact_sales'[net_revenue]))",
       "columns": [
         "gross_profit",
         "net_revenue"
@@ -235,6 +247,7 @@
       ],
       "sql": "SUM(f.discount_amount)",
       "tableau": "SUM([discount_amount])",
+      "dax": "SUM('fact_sales'[discount_amount])",
       "columns": [
         "discount_amount"
       ]
@@ -252,6 +265,7 @@
       ],
       "sql": "SUM(f.discount_amount) * 1.0 / NULLIF(SUM(f.gross_sales), 0)",
       "tableau": "SUM([discount_amount]) / SUM([gross_sales])",
+      "dax": "DIVIDE(SUM('fact_sales'[discount_amount]), SUM('fact_sales'[gross_sales]))",
       "columns": [
         "discount_amount",
         "gross_sales"
@@ -271,6 +285,7 @@
       ],
       "sql": "SUM(f.returned_amount) * 1.0 / NULLIF(SUM(f.net_revenue), 0)",
       "tableau": "SUM([returned_amount]) / SUM([net_revenue])",
+      "dax": "DIVIDE(SUM('fact_sales'[returned_amount]), SUM('fact_sales'[net_revenue]))",
       "columns": [
         "returned_amount",
         "net_revenue"
@@ -288,6 +303,7 @@
       ],
       "sql": "SUM(f.returned_amount)",
       "tableau": "SUM([returned_amount])",
+      "dax": "SUM('fact_sales'[returned_amount])",
       "columns": [
         "returned_amount"
       ]
@@ -304,6 +320,7 @@
       ],
       "sql": "AVG(f.is_cancelled * 1.0)",
       "tableau": "AVG([is_cancelled])",
+      "dax": "AVERAGE('fact_sales'[is_cancelled])",
       "columns": [
         "is_cancelled"
       ]
@@ -321,6 +338,7 @@
       ],
       "sql": "SUM(f.shipping_cost)",
       "tableau": "SUM([shipping_cost])",
+      "dax": "SUM('fact_sales'[shipping_cost])",
       "columns": [
         "shipping_cost"
       ]
@@ -339,6 +357,7 @@
       ],
       "sql": "AVG(f.delivery_days)",
       "tableau": "AVG([delivery_days])",
+      "dax": "AVERAGE('fact_sales'[delivery_days])",
       "columns": [
         "delivery_days"
       ]

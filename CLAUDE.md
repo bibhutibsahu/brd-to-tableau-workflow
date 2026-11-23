@@ -8,13 +8,28 @@ BRD → Tableau AI: a Streamlit app (`app.py`) that uses Gemini (`google-genai`)
 Document into reviewed Tableau workbooks over a SQLite ecommerce star schema (`data/ecommerce.db`). It is an app
 run from the repo root, not an installable package (`[tool.uv] package = false`).
 
+- The app runs a **3-step, 3-agent workflow** (`modules/agents/`, CLI `modules/workflow.py`). Each agent reads
+  the previous step's file and writes its own under `outputs/<project>/step1_brd | step2_mockup | step3_<platform>`:
+  1. `BRDAnalystAgent`: customer BRD → our BRD format (`templates/brd_template.json`, logic in
+     `modules/brd_template.py`) with gaps flagged → finalised `brd_final.json`.
+  2. `DashboardDesignerAgent`: `brd_final.json` → `dashboard_spec.json` / `.md` (KPI formulas, charts, tech stack,
+     traceability) + `dashboard_mockup.html` (`modules/html_mockup.py`, `templates/mockup_template.html`). It reuses
+     `pipeline.design_from_requirements`.
+  3. `BIPublisherAgent`: `dashboard_spec.json` → Tableau (`twb_builder`) or the Power BI hand-off pack. Platforms are
+     adapters in `PLATFORMS`; add a new platform there. No LLM in Step 3.
+  The spec's `plan` key is the build contract for Step 3. Keep the spec backward compatible, or bump `SPEC_VERSION`.
+- Current main path: Steps 1 + 2 in one go via `workflow.run_brd_to_html` (app "▶ Run" box, CLI
+  `python -m modules.workflow run <brd>`). The separate step tabs stay for later review; keep both working.
+- The original one-click flow (`pipeline.run_until_preview`, `python -m modules.pipeline`) must keep working.
+- `llm_client` retries dropped connections / 5xx (`TRANSIENT_RETRY_WAITS`); bad keys and quota fail at once.
 - `config.py`: every setting and env var (`.env` overrides). Add new env vars here **and** to `.env.example`
   and the README configuration table.
 - `modules/pipeline.py`: step runner and CLI. `modules/llm_client.py`: the only place that calls Gemini.
 - `modules/sql_generator.py` builds SQL **only** from validated metric / dimension ids, with filter values as
   bound parameters on a read-only connection. Keep it that way: never interpolate LLM output into SQL.
-- `templates/dashboard_config.json`: one definition per KPI (`sql` for the preview, `tableau` for the
-  workbook). Change both together so the preview and the workbook show the same numbers.
+- `templates/dashboard_config.json`: one definition per KPI (`sql` for the preview and HTML mockup, `tableau` for
+  the workbook, `dax` for Power BI). Change all three together so every output shows the same numbers.
+- Changing `templates/brd_template.json`? Regenerate the shareable copies: `uv run python -m modules.workflow template`.
 - `prompts/*.txt`: LLM prompts. `scripts/`: data and sample-BRD generators.
 
 ## Tooling: uv only

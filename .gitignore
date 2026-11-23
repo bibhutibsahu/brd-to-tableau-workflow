@@ -44,3 +44,6 @@ desktop.ini
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Cached chart library for offline HTML mockups (python -m modules.workflow vendor)
+templates/vendor/

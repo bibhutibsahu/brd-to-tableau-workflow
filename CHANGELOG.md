@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). Each version matches one commit whose subject is exactly `vX.Y.Z`.
 
+## v0.3.0 - 2026-11-23
+
+### Added
+
+- 3-step, 3-agent workflow (`modules/agents/`). Each agent reads the previous step's file and writes its own
+  under `outputs/<project>/`:
+  - Agent 1 · BRD Analyst: maps a customer BRD onto our standard BRD format, marks each field provided /
+    inferred / missing with a question and a suggested default, applies pasted customer answers, and finalises
+    the BRD (`.json`, `.md`, `.docx`) plus a gap report for the customer.
+  - Agent 2 · Dashboard Designer: turns the finalised BRD into a dashboard spec (`dashboard_spec.json` / `.md`)
+    with every KPI's SQL, Tableau and DAX formula, charts, filters, data model, tech stack and BRD
+    traceability, and builds a single-file HTML dashboard mockup (ECharts, light / dark, table view,
+    formulas and traceability tabs).
+  - Agent 3 · BI Publisher: builds the approved spec in Tableau (packaged workbook) or as a Power BI hand-off
+    pack (DAX measures, data model, page-by-page build guide). Platforms are pluggable adapters.
+- One-go run of Steps 1 + 2: the app's **▶ Run** box and `python -m modules.workflow run <brd>` take a customer
+  BRD straight to the HTML dashboard, filling gaps with AI suggestions marked *assumed*.
+- Standard BRD template (`templates/brd_template.json`, with `.md` / `.docx` copies to send to customers).
+- `python -m modules.workflow` CLI: `run`, `template`, `vendor`, `step1`, `step2`, `step3`, `demo`.
+- Offline mockups: `python -m modules.workflow vendor` caches ECharts so new mockups embed it.
+- Power BI DAX formula for every KPI in `templates/dashboard_config.json`.
+- `.streamlit/config.toml` keeps the app on localhost, because the sidebar pre-fills the Gemini key.
+
+### Changed
+
+- The app is organised as the one-go Run box followed by Step 1 / Step 2 / Step 3 / LLM trace tabs. All
+  earlier views (requirements, schema mapping, SQL & KPI logic, preview & review, Tableau export) remain.
+- The pipeline's design stages are reusable (`pipeline.design_from_requirements`); `run_until_preview` and
+  `python -m modules.pipeline` behave as before.
+- BRD requirement ids (e.g. FR-1.1) are kept on visuals so charts trace back to the BRD.
+- Gemini calls retry dropped connections and 5xx errors with backoff; bad keys and quota errors still fail
+  immediately.
+- Started with an older Streamlit from another Python, the app explains how to start it correctly instead
+  of crashing.
+- The `repo-baseline` Claude Code skill now expects `main` as the default branch (it said `master`), matching
+  this repo, CI and `CLAUDE.md`.
+
 ## v0.2.0 - 2026-11-16
 
 ### Added

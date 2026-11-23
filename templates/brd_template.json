@@ -1,0 +1,146 @@
+{
+  "template_name": "BI Dashboard Business Requirements Document",
+  "template_version": "1.0",
+  "description": "Our standard BRD format. Agent 1 (BRD Analyst) maps every customer BRD onto these fields, flags what is missing, and the analyst completes it before it is finalised for dashboard design.",
+  "statuses": {
+    "provided": "Stated in the customer BRD",
+    "inferred": "Derived by the AI from the customer BRD - confirm with the customer",
+    "missing": "Not in the customer BRD - ask the customer",
+    "assumed": "Missing in the customer BRD - AI suggestion accepted as an assumption",
+    "confirmed": "Entered or confirmed by the analyst"
+  },
+  "sections": [
+    {
+      "id": "document_control",
+      "title": "1. Document Control",
+      "fields": [
+        {"id": "project_name", "label": "Project name", "type": "text", "required": true, "guidance": "Short name of the reporting project."},
+        {"id": "client_name", "label": "Client / business unit", "type": "text", "required": true, "guidance": "Customer organisation or business unit that owns the dashboards."},
+        {"id": "industry_domain", "label": "Industry domain", "type": "text", "required": true, "guidance": "ecommerce, retail, finance, BFSI, manufacturing, healthcare, ..."},
+        {"id": "document_version", "label": "Document version", "type": "text", "required": false, "guidance": "Version of the customer BRD, e.g. 1.2."},
+        {"id": "brd_owner", "label": "BRD owner", "type": "text", "required": true, "guidance": "Person or role accountable for the requirements."},
+        {"id": "business_sponsor", "label": "Business sponsor", "type": "text", "required": true, "guidance": "Executive who sponsors and signs off the project."},
+        {"id": "target_platform", "label": "Target BI platform", "type": "text", "required": true, "guidance": "Tableau, Power BI, or TBD. The HTML mockup is platform neutral."}
+      ]
+    },
+    {
+      "id": "business_context",
+      "title": "2. Business Context",
+      "fields": [
+        {"id": "business_objective", "label": "Business objective", "type": "text", "required": true, "guidance": "One or two sentences: what decisions the dashboards must support."},
+        {"id": "current_state", "label": "Current state / pain points", "type": "text", "required": false, "guidance": "How reporting is done today and what is wrong with it."},
+        {"id": "success_criteria", "label": "Success criteria", "type": "list", "required": true, "guidance": "Measurable outcomes that show the project worked."}
+      ]
+    },
+    {
+      "id": "scope",
+      "title": "3. Scope",
+      "fields": [
+        {"id": "in_scope", "label": "In scope", "type": "list", "required": true, "guidance": "Business areas, dashboards and data covered."},
+        {"id": "out_of_scope", "label": "Out of scope", "type": "list", "required": false, "guidance": "What is explicitly excluded."}
+      ]
+    },
+    {
+      "id": "stakeholders",
+      "title": "4. Stakeholders & Users",
+      "fields": [
+        {"id": "stakeholders", "label": "Stakeholders", "type": "table", "required": true, "guidance": "Every user group of the dashboards.",
+         "columns": [
+           {"id": "role", "label": "Role / team"},
+           {"id": "needs", "label": "Key questions / needs"},
+           {"id": "usage", "label": "Usage frequency"}
+         ]}
+      ]
+    },
+    {
+      "id": "data",
+      "title": "5. Data Sources",
+      "fields": [
+        {"id": "data_sources", "label": "Data sources", "type": "table", "required": true, "guidance": "Systems or tables the dashboards read from.",
+         "columns": [
+           {"id": "name", "label": "Source"},
+           {"id": "description", "label": "Description / tables"},
+           {"id": "refresh", "label": "Refresh frequency"},
+           {"id": "owner", "label": "Data owner"}
+         ]},
+        {"id": "data_grain", "label": "Data grain", "type": "text", "required": true, "guidance": "Lowest level of detail, e.g. order line, transaction, daily snapshot."},
+        {"id": "history_required", "label": "History required", "type": "text", "required": true, "guidance": "How far back the data must go, e.g. 24 months."},
+        {"id": "data_quality_notes", "label": "Data quality notes", "type": "list", "required": false, "guidance": "Known gaps, late data, unavailable fields."}
+      ]
+    },
+    {
+      "id": "reporting",
+      "title": "6. Reporting Requirements",
+      "fields": [
+        {"id": "time_grain", "label": "Reporting time grain", "type": "text", "required": true, "guidance": "day, week, month, quarter or year."},
+        {"id": "default_date_range", "label": "Default date range", "type": "text", "required": false, "guidance": "e.g. last 12 months, fiscal year to date."},
+        {"id": "global_filters", "label": "Global filters", "type": "list", "required": true, "guidance": "Fields users must be able to filter every dashboard by, e.g. Month, Region."},
+        {"id": "currency_units", "label": "Currency & number formats", "type": "text", "required": false, "guidance": "e.g. INR with lakh / crore, percentages to one decimal."}
+      ]
+    },
+    {
+      "id": "kpis",
+      "title": "7. KPI Definitions",
+      "fields": [
+        {"id": "kpis", "label": "KPI catalogue", "type": "table", "required": true, "guidance": "Every KPI used on any dashboard, with its business definition.",
+         "columns": [
+           {"id": "name", "label": "KPI"},
+           {"id": "definition", "label": "Business definition / formula"},
+           {"id": "format", "label": "Format"},
+           {"id": "target", "label": "Target / threshold"},
+           {"id": "priority", "label": "Priority"}
+         ]}
+      ]
+    },
+    {
+      "id": "dashboards",
+      "title": "8. Dashboards",
+      "fields": [
+        {"id": "dashboards", "label": "Dashboards", "type": "table", "required": true, "guidance": "One row per dashboard. KPIs is a comma-separated list of KPI names from section 7.",
+         "columns": [
+           {"id": "name", "label": "Dashboard"},
+           {"id": "purpose", "label": "Purpose / decision supported"},
+           {"id": "audience", "label": "Audience"},
+           {"id": "kpis", "label": "KPIs (comma separated)"}
+         ]},
+        {"id": "visuals", "label": "Visual requirements", "type": "table", "required": true, "guidance": "One row per chart. Dashboard must match a dashboard name above.",
+         "columns": [
+           {"id": "ref", "label": "Req. ID"},
+           {"id": "dashboard", "label": "Dashboard"},
+           {"id": "title", "label": "Requirement / title"},
+           {"id": "metric", "label": "Measure"},
+           {"id": "dimension", "label": "Breakdown"},
+           {"id": "chart_hint", "label": "Chart type (if specified)"},
+           {"id": "top_n", "label": "Top N"}
+         ]}
+      ]
+    },
+    {
+      "id": "non_functional",
+      "title": "9. Non-Functional Requirements",
+      "fields": [
+        {"id": "refresh_schedule", "label": "Refresh schedule", "type": "text", "required": true, "guidance": "How often dashboards must refresh, e.g. daily 6 AM IST."},
+        {"id": "performance", "label": "Performance", "type": "text", "required": false, "guidance": "e.g. every dashboard loads in under 5 seconds."},
+        {"id": "security_access", "label": "Security & access", "type": "text", "required": true, "guidance": "Who can see what: row-level security, roles, SSO."},
+        {"id": "branding", "label": "Branding & design", "type": "text", "required": false, "guidance": "Corporate colours, logo, style guide."},
+        {"id": "devices", "label": "Devices", "type": "text", "required": false, "guidance": "Desktop, tablet, mobile."}
+      ]
+    },
+    {
+      "id": "delivery",
+      "title": "10. Delivery & Sign-off",
+      "fields": [
+        {"id": "timeline", "label": "Timeline / milestones", "type": "text", "required": false, "guidance": "Key dates: mockup review, UAT, go-live."},
+        {"id": "acceptance_criteria", "label": "Acceptance criteria", "type": "list", "required": true, "guidance": "What must be true for the customer to accept the dashboards."},
+        {"id": "assumptions", "label": "Assumptions", "type": "list", "required": false, "guidance": "Anything interpreted rather than stated."},
+        {"id": "open_questions", "label": "Open questions", "type": "list", "required": false, "guidance": "Items still pending with the customer."},
+        {"id": "sign_off", "label": "Sign-off", "type": "table", "required": false, "guidance": "Approvers of the final BRD.",
+         "columns": [
+           {"id": "name", "label": "Name"},
+           {"id": "role", "label": "Role"},
+           {"id": "date", "label": "Date"}
+         ]}
+      ]
+    }
+  ]
+}

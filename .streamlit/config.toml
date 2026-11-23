@@ -1,0 +1,10 @@
+# Streamlit settings for this app (read automatically by `streamlit run app.py` from the repo root).
+
+[server]
+# Only this computer can open the app. The sidebar pre-fills the Gemini key from .env, so the app must not be
+# reachable from the network. Override for a shared demo with: streamlit run app.py --server.address 0.0.0.0
+address = "localhost"
+port = 8501
+
+[browser]
+gatherUsageStats = false

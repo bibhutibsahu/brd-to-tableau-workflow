@@ -11,6 +11,21 @@ import time
 import config
 
 MAX_TRACE_CHARS = 20000  # prompt / response text kept per call for the trace view
+TRANSIENT_RETRY_WAITS = (2, 5, 10)  # seconds between retries of dropped connections / server errors
+TRANSIENT_MARKERS = (
+    "disconnected",
+    "connection",
+    "timed out",
+    "timeout",
+    "temporarily",
+    "unavailable",
+    " 500",
+    " 502",
+    " 503",
+    " 504",
+    "internal",
+    "overloaded",
+)
 
 
 class LLMError(RuntimeError):
@@ -62,13 +77,19 @@ class LLMClient:
         last_error = None
         for _attempt in range(2):
             started = time.perf_counter()
-            try:
-                response = self._get_client().models.generate_content(
-                    model=self.model, contents=contents, config=settings
-                )
-            except Exception as error:
-                self._record(purpose, prompt, "", started, None, ok=False, error=str(error))
-                raise LLMError(_friendly_error(error, self.model)) from error
+            for network_try, wait in enumerate((*TRANSIENT_RETRY_WAITS, None)):
+                try:
+                    response = self._get_client().models.generate_content(
+                        model=self.model, contents=contents, config=settings
+                    )
+                    break
+                except Exception as error:
+                    self._record(purpose, prompt, "", started, None, ok=False, error=str(error))
+                    if wait is None or not _is_transient(error):
+                        raise LLMError(_friendly_error(error, self.model)) from error
+                    self.calls[-1]["error"] += f" (retry {network_try + 1} in {wait}s)"
+                    time.sleep(wait)
+                    started = time.perf_counter()
             text = response.text or ""
             try:
                 value = parse_json(text)
@@ -103,6 +124,14 @@ class LLMClient:
                 "response": text[:MAX_TRACE_CHARS],
             }
         )
+
+
+def _is_transient(error: Exception) -> bool:
+    """Network drops and 5xx errors are worth retrying; bad keys, unknown models and quota are not."""
+    message = f" {type(error).__name__} {error}".lower()
+    if any(m in message for m in ("api key", "permission_denied", "not found", "quota", "resource_exhausted")):
+        return False
+    return any(marker in message for marker in TRANSIENT_MARKERS)
 
 
 def _friendly_error(error: Exception, model: str) -> str:

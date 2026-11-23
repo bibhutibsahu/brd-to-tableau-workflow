@@ -27,23 +27,38 @@ class PipelineError(RuntimeError):
         self.step, self.cause = step, error
 
 
-def run_until_preview(source, filename: str | None = None, llm: LLMClient | None = None, log=print) -> dict:
-    llm = llm or LLMClient()
-    if not llm.available:
-        raise LLMError("No Gemini API key. Enter it in the sidebar or set GEMINI_API_KEY in .env.")
-    state = {"mode": f"llm:{llm.model}"}
-
+def _step_runner(log, total):
     def step(number, label, fn):
-        log(f"{number}/{STEPS} {label}")
+        log(f"{number}/{total} {label}")
         try:
             return fn()
         except Exception as error:
             raise PipelineError(label, error) from error
 
-    state["brd"] = step(1, "Parsing BRD", lambda: parse_brd(source, filename))
-    state["requirements"] = step(
-        2, "Extracting requirements with Gemini", lambda: extract_requirements(state["brd"]["text"], llm)
-    )
+    return step
+
+
+def run_until_preview(source, filename: str | None = None, llm: LLMClient | None = None, log=print) -> dict:
+    """One-click path: customer BRD -> requirements (no gap filling) -> preview.
+
+    The 3-step workflow (modules/workflow.py) runs Step 1 (BRD Analyst) first and then calls
+    design_from_requirements with the finalised BRD instead.
+    """
+    llm = llm or LLMClient()
+    if not llm.available:
+        raise LLMError("No Gemini API key. Enter it in the sidebar or set GEMINI_API_KEY in .env.")
+    step = _step_runner(log, STEPS)
+    brd = step(1, "Parsing BRD", lambda: parse_brd(source, filename))
+    requirements = step(2, "Extracting requirements with Gemini", lambda: extract_requirements(brd["text"], llm))
+    return design_from_requirements(requirements, llm, log, brd=brd)
+
+
+def design_from_requirements(requirements: dict, llm: LLMClient, log=print, brd: dict | None = None) -> dict:
+    """Steps 3-8: schema mapping, SQL, execution, visual plan, preview and insights."""
+    if not llm.available:
+        raise LLMError("No Gemini API key. Enter it in the sidebar or set GEMINI_API_KEY in .env.")
+    step = _step_runner(log, STEPS)
+    state = {"mode": f"llm:{llm.model}", "brd": brd, "requirements": requirements}
     state["schema"] = step(3, "Reading database schema", introspect_schema)
     state["semantic"] = build_semantic_layer(state["schema"])
     state["mapped"] = step(

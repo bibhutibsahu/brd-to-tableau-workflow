@@ -1,6 +1,6 @@
 [project]
 name = "brd-to-tableau-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Gemini-powered app that turns a Business Requirements Document into reviewed Tableau dashboards over an ecommerce star schema."
 readme = "README.md"
 authors = [

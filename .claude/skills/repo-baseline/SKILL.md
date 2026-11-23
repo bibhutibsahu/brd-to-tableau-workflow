@@ -1,6 +1,6 @@
 ---
 name: repo-baseline
-description: Audit and set up the baseline hygiene of this project's Git repository, whatever its language or stack. Ensures a project-specific README, a tailored .gitignore that protects secrets and log files, secret-leak checks for environment variables, pre-commit hooks with the right linters (ruff for Python, sqlfluff for SQL, and so on), GitHub Actions workflows, and master as the default branch in Git and GitHub. Use this skill whenever the user asks to set up, initialise, bootstrap, tidy, audit, harden or "make production ready" a repository, mentions .gitignore, README, pre-commit, CI, GitHub workflows, linting setup, default branch or leaked secrets, or starts work in a repo that is missing any of these, even if they do not ask for a full audit.
+description: Audit and set up the baseline hygiene of this project's Git repository, whatever its language or stack. Ensures a project-specific README, a tailored .gitignore that protects secrets and log files, secret-leak checks for environment variables, pre-commit hooks with the right linters (ruff for Python, sqlfluff for SQL, and so on), GitHub Actions workflows, and main as the default branch in Git and GitHub. Use this skill whenever the user asks to set up, initialise, bootstrap, tidy, audit, harden or "make production ready" a repository, mentions .gitignore, README, pre-commit, CI, GitHub workflows, linting setup, default branch or leaked secrets, or starts work in a repo that is missing any of these, even if they do not ask for a full audit.
 ---
 
 # Repository Baseline
@@ -17,11 +17,11 @@ Bring this project's repository up to a consistent, secure baseline. Work for an
 
 ## Checklist
 
-### 1. Default branch is `master`
+### 1. Default branch is `main`
 
-- Local: `git config init.defaultBranch master`. If the repo uses another name, rename with `git branch -m <old> master`.
-- Remote: if a GitHub remote exists, check with `gh repo view --json defaultBranchRef`. If it is not `master`, push `master` and run `gh repo edit --default-branch master`. Tell the user before deleting any old remote branch.
-- Every workflow, branch protection rule and README badge must reference `master`, never `main`.
+- Local: `git config init.defaultBranch main`. If the repo uses another name, rename with `git branch -m <old> main`.
+- Remote: if a GitHub remote exists, check with `gh repo view --json defaultBranchRef`. If it is not `main`, push `main` and run `gh repo edit --default-branch main`. Tell the user before deleting any old remote branch.
+- Every workflow, branch protection rule and README badge must reference `main`, never `master`.
 
 ### 2. README.md populated for this project
 
@@ -97,7 +97,7 @@ Never invent version numbers. Use any `rev`, then run `pre-commit autoupdate` to
 
 Create `.github/workflows/` with at minimum:
 
-- `ci.yml`: triggers on `push` and `pull_request` to `master`; sets up the detected language runtime; installs dependencies; runs `pre-commit run --all-files`; runs the test suite if one exists.
+- `ci.yml`: triggers on `push` and `pull_request` to `main`; sets up the detected language runtime; installs dependencies; runs `pre-commit run --all-files`; runs the test suite if one exists.
 - `secret-scan.yml` (or a job inside `ci.yml`): runs gitleaks on push and pull request with `fetch-depth: 0` so full history is scanned.
 
 Use least-privilege `permissions:` (default `contents: read`), pin actions to a released major version or commit SHA, and enable dependency caching. Add `.github/dependabot.yml` for the detected package ecosystems plus `github-actions`.
@@ -113,4 +113,4 @@ Use least-privilege `permissions:` (default `contents: read`), pin actions to a 
 
 ## Final report
 
-End with a short summary covering: the detected stacks; each checklist item and whether it was already fine, fixed or created; any secrets found and the action the user must take; manual steps remaining (for example enabling push protection or branch protection on `master` in GitHub settings).
+End with a short summary covering: the detected stacks; each checklist item and whether it was already fine, fixed or created; any secrets found and the action the user must take; manual steps remaining (for example enabling push protection or branch protection on `main` in GitHub settings).
